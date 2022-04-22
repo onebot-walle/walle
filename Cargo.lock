@@ -897,7 +897,7 @@ dependencies = [
 [[package]]
 name = "walle-core"
 version = "0.1.1"
-source = "git+https://github.com/abrahum/walle-core?branch=master#9a6dd9ec6eb6567003c226f1566f8a8980a99963"
+source = "git+https://github.com/abrahum/walle-core?branch=master#b900690e82fef9a89a8af60021a115a3642517f0"
 dependencies = [
  "async-trait",
  "colored",

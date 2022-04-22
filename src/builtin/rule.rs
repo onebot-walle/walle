@@ -1,5 +1,5 @@
-use crate::{Rule, Session};
-use walle_core::{EventContent, MessageContent};
+use crate::{rule_fn, Rule, Session};
+use walle_core::{EventContent, MessageContent, MessageSegment};
 
 pub struct UserIdChecker {
     pub user_id: String,
@@ -61,9 +61,21 @@ where
 }
 
 pub fn start_with(word: &str) -> impl Rule<MessageContent> {
-    use crate::rule_fn;
     let word = word.to_string();
     rule_fn(move |session: &Session<MessageContent>| -> bool {
         session.event.content.alt_message.starts_with(&word)
+    })
+}
+
+pub fn at_me() -> impl Rule<MessageContent> {
+    rule_fn(|session: &Session<MessageContent>| -> bool {
+        for seg in session.event.content.message.iter() {
+            if let MessageSegment::Mention { user_id, .. } = seg {
+                if user_id == &session.bot.self_id {
+                    return true;
+                }
+            }
+        }
+        false
     })
 }
