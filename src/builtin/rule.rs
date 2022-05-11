@@ -67,7 +67,7 @@ pub fn start_with(word: &str) -> impl Rule<MessageContent> {
     })
 }
 
-pub fn at_me() -> impl Rule<MessageContent> {
+pub fn mention_me() -> impl Rule<MessageContent> {
     rule_fn(|session: &Session<MessageContent>| -> bool {
         for seg in session.event.content.message.iter() {
             if let MessageSegment::Mention { user_id, .. } = seg {

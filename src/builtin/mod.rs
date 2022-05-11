@@ -1,8 +1,9 @@
 mod echo;
-pub use echo::*;
-mod rule;
-pub use rule::*;
-mod pre_handle;
-pub use pre_handle::*;
 mod matcher;
+mod pre_handle;
+mod rule;
+
+pub use echo::*;
 pub use matcher::*;
+pub use pre_handle::*;
+pub use rule::*;
