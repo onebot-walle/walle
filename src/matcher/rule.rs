@@ -1,4 +1,4 @@
-use crate::{Handler, Session};
+use crate::{MatcherHandler, Session};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -7,7 +7,7 @@ pub trait Rule<C> {
     fn layer<H>(self, handler: H) -> LayeredRule<Self, H>
     where
         Self: Sized,
-        H: Handler<C>,
+        H: MatcherHandler<C>,
     {
         LayeredRule {
             rule: self,
@@ -21,10 +21,10 @@ pub struct LayeredRule<R, H> {
     pub handler: H,
 }
 
-impl<R, H, C> Handler<C> for LayeredRule<R, H>
+impl<R, H, C> MatcherHandler<C> for LayeredRule<R, H>
 where
     R: Rule<C> + Sync,
-    H: Handler<C> + Sync,
+    H: MatcherHandler<C> + Sync,
     C: 'static,
 {
     fn _match(&self, session: &Session<C>) -> bool {

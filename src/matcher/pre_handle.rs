@@ -1,4 +1,4 @@
-use crate::{Handler, Session};
+use crate::{MatcherHandler, Session};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -7,7 +7,7 @@ pub trait PreHandler<C> {
     fn layer<H>(self, handler: H) -> LayeredPreHandler<Self, H>
     where
         Self: Sized,
-        H: Handler<C>,
+        H: MatcherHandler<C>,
     {
         LayeredPreHandler { pre: self, handler }
     }
@@ -18,10 +18,10 @@ pub struct LayeredPreHandler<P, H> {
     pub handler: H,
 }
 
-impl<P, H, C> Handler<C> for LayeredPreHandler<P, H>
+impl<P, H, C> MatcherHandler<C> for LayeredPreHandler<P, H>
 where
     P: PreHandler<C> + Sync,
-    H: Handler<C> + Sync,
+    H: MatcherHandler<C> + Sync,
     C: 'static,
 {
     fn _pre_handle(&self, session: &mut Session<C>) {

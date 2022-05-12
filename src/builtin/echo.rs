@@ -1,20 +1,20 @@
 use super::on_command;
-use crate::{handler_fn, Handler, Plugin, Session};
+use crate::{handler_fn, MatcherHandler, Matcher, Session};
 use async_trait::async_trait;
 use walle_core::MessageContent;
 
 pub struct Echo;
 
 #[async_trait]
-impl Handler<MessageContent> for Echo {
+impl MatcherHandler<MessageContent> for Echo {
     async fn handle(&self, session: Session<MessageContent>) {
         let _ = session.send(session.event.message().clone()).await;
     }
 }
 
 impl Echo {
-    pub fn new() -> Plugin<MessageContent> {
-        Plugin::new("echo", "echo description", on_command("echo", Echo))
+    pub fn new() -> Matcher<MessageContent> {
+        Matcher::new("echo", "echo description", on_command("echo", Echo))
     }
 }
 
@@ -36,8 +36,8 @@ impl Echo {
 //     }
 // }
 
-pub fn echo2() -> Plugin<MessageContent> {
-    Plugin::new(
+pub fn echo2() -> Matcher<MessageContent> {
+    Matcher::new(
         "echo2",
         "echo2 description",
         on_command(

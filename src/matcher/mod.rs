@@ -1,23 +1,28 @@
-use crate::{LayeredPreHandler, LayeredRule, Plugin, PreHandler, Rule, TempPlugins};
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 use walle_core::app::StandardArcBot;
 use walle_core::{BaseEvent, EventContent, IntoMessage, MessageContent, Resps, WalleResult};
 
+mod matchers;
+mod pre_handle;
+mod rule;
+
+pub use matchers::*;
+pub use pre_handle::*;
+pub use rule::*;
+
 #[async_trait]
-pub trait Handler<C>: Sync {
+pub trait MatcherHandler<C>: Sync {
     fn _match(&self, _session: &Session<C>) -> bool {
         true
     }
     /// if matched will be called before handle, should never fail
     fn _pre_handle(&self, _session: &mut Session<C>) {}
     async fn handle(&self, session: Session<C>);
-    // async fn on_startup(&self) {}
-    // async fn on_shutdown(&self) {}
 }
 
-pub trait HandlerExt<C>: Handler<C> {
+pub trait MatcherHandlerExt<C>: MatcherHandler<C> {
     fn rule<R>(self, rule: R) -> LayeredRule<R, Self>
     where
         Self: Sized,
@@ -34,7 +39,7 @@ pub trait HandlerExt<C>: Handler<C> {
     }
 }
 
-impl<C, H: Handler<C>> HandlerExt<C> for H {}
+impl<C, H: MatcherHandler<C>> MatcherHandlerExt<C> for H {}
 
 pub struct HandlerFn<I>(I);
 
@@ -47,11 +52,11 @@ where
     HandlerFn(inner)
 }
 
-impl<C, I, Fut> Handler<C> for HandlerFn<I>
+impl<C, I, Fut> MatcherHandler<C> for HandlerFn<I>
 where
     C: Sync + Send + 'static,
-    I: Fn(Session<C>) -> Fut + Send + Sync,
-    Fut: Future<Output = ()> + Send,
+    I: Fn(Session<C>) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
 {
     fn handle<'a, 'b>(
         &'a self,
@@ -61,7 +66,7 @@ where
         'a: 'b,
         Self: 'b,
     {
-        Box::pin(async move { self.0(session).await })
+        Box::pin(self.0(session))
     }
 }
 
@@ -69,15 +74,15 @@ where
 pub struct Session<C> {
     pub bot: walle_core::app::StandardArcBot,
     pub event: walle_core::event::BaseEvent<C>,
-    temp_plugins: TempPlugins,
+    temp_matchers: TempMatchers,
 }
 
 impl<C> Session<C> {
-    pub fn new(bot: StandardArcBot, event: BaseEvent<C>, temp_plugins: TempPlugins) -> Self {
+    pub fn new(bot: StandardArcBot, event: BaseEvent<C>, temp_plugins: TempMatchers) -> Self {
         Self {
             bot,
             event,
-            temp_plugins,
+            temp_matchers: temp_plugins,
         }
     }
 
@@ -92,7 +97,7 @@ impl Session<EventContent> {
             Some(Session {
                 bot: self.bot,
                 event,
-                temp_plugins: self.temp_plugins,
+                temp_matchers: self.temp_matchers,
             })
         } else {
             None
@@ -124,14 +129,14 @@ impl Session<MessageContent> {
             self.event.group_id().map(ToString::to_string),
             tx,
         );
-        self.temp_plugins.lock().await.insert(name.clone(), temp);
+        self.temp_matchers.lock().await.insert(name.clone(), temp);
         self.send(message).await?;
         match tokio::time::timeout(timeout, rx.recv()).await {
             Ok(Some(event)) => {
                 self.replace_evnet(event);
             }
             _ => {
-                self.temp_plugins.lock().await.remove(&name);
+                self.temp_matchers.lock().await.remove(&name);
             }
         };
         Ok(())
@@ -143,7 +148,7 @@ pub struct TempMathcer {
 }
 
 #[async_trait]
-impl Handler<EventContent> for TempMathcer {
+impl MatcherHandler<EventContent> for TempMathcer {
     async fn handle(&self, session: Session<EventContent>) {
         let event = session.event;
         self.tx.send(event.try_into().unwrap()).await.unwrap();
@@ -155,20 +160,20 @@ impl TempMathcer {
         user_id: String,
         group_id: Option<String>,
         tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
-    ) -> (String, Plugin<EventContent>) {
+    ) -> (String, Matcher<EventContent>) {
         use crate::builtin::{group_id_check, user_id_check};
         let name = format!("{}-{:?}", user_id, group_id);
         let matcher = user_id_check(user_id).layer(Self { tx });
         (
             name.clone(),
             if let Some(group_id) = group_id {
-                Plugin::new(
+                Matcher::new(
                     name,
                     "".to_string(),
                     group_id_check(group_id).layer(matcher),
                 )
             } else {
-                Plugin::new(name, "".to_string(), matcher)
+                Matcher::new(name, "".to_string(), matcher)
             },
         )
     }

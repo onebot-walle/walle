@@ -3,21 +3,16 @@ use std::sync::Arc;
 use walle_core::{AppConfig, WalleResult};
 
 pub mod builtin;
-mod handler;
-mod plugin;
-mod pre_handle;
-mod rule;
-pub use handler::*;
-pub use plugin::*;
-pub use pre_handle::*;
-pub use rule::*;
+mod matcher;
+
+pub use matcher::*;
 
 pub struct Walle {
     pub ob: Arc<walle_core::app::StandardOneBot>,
 }
 
 impl Walle {
-    pub fn new(config: AppConfig, plugins: Plugins) -> Self {
+    pub fn new(config: AppConfig, plugins: Matchers) -> Self {
         let timer = tracing_subscriber::fmt::time::OffsetTime::new(
             time::UtcOffset::from_hms(8, 0, 0).unwrap(),
             time::format_description::parse(

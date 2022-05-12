@@ -1,11 +1,11 @@
 use walle_core::MessageContent;
 
 use super::{start_with, strip_prefix};
-use crate::{Handler, HandlerExt};
+use crate::{MatcherHandler, MatcherHandlerExt};
 
-pub fn on_command<H>(command: &str, handler: H) -> impl Handler<MessageContent>
+pub fn on_command<H>(command: &str, handler: H) -> impl MatcherHandler<MessageContent>
 where
-    H: Handler<MessageContent> + Sync,
+    H: MatcherHandler<MessageContent> + Sync,
 {
     handler
         .rule(start_with(command))
