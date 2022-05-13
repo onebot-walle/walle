@@ -28,11 +28,7 @@ where
     C: 'static,
 {
     fn _match(&self, session: &Session<C>) -> bool {
-        if self.rule.rule(session) {
-            self.handler._match(session)
-        } else {
-            false
-        }
+        self.rule.rule(session) && self.handler._match(session)
     }
     fn _pre_handle(&self, session: &mut Session<C>) {
         self.handler._pre_handle(session)

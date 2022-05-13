@@ -25,6 +25,7 @@ where
     C: 'static,
 {
     fn _pre_handle(&self, session: &mut Session<C>) {
+        self.handler._pre_handle(session);
         self.pre.pre_handle(session);
     }
     fn _match(&self, session: &Session<C>) -> bool {

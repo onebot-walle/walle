@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 use walle_core::app::StandardArcBot;
-use walle_core::{BaseEvent, EventContent, IntoMessage, MessageContent, Resps, WalleResult};
+use walle_core::{
+    BaseEvent, EventContent, IntoMessage, Message, MessageContent, Resps, WalleResult,
+};
 
 mod matchers;
 mod pre_handle;
@@ -140,6 +142,22 @@ impl Session<MessageContent> {
             }
         };
         Ok(())
+    }
+
+    pub fn message(&self) -> &Message {
+        &self.event.content.message
+    }
+
+    pub fn alt_message(&self) -> &str {
+        &self.event.content.alt_message
+    }
+
+    pub fn message_mut(&mut self) -> &mut Message {
+        &mut self.event.content.message
+    }
+
+    pub fn alt_message_mut(&mut self) -> &mut String {
+        &mut self.event.content.alt_message
     }
 }
 

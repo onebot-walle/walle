@@ -7,8 +7,11 @@ license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+scheduler = ["tokio-cron-scheduler"]
+
 [dependencies]
-walle-core = { version = "0.2", features = ["websocket", "app"] }
+walle-core = { version = "0.3", features = ["websocket", "app"] }
 async-trait = "0.1"
 tokio = "1.17"
 tracing-subscriber = { version = "0.3.9", features = [
@@ -17,6 +20,11 @@ tracing-subscriber = { version = "0.3.9", features = [
     "time",
 ] }
 time = { version = "0.3", features = ["macros"] }
+tokio-cron-scheduler = { version = "0.7", optional = true }
+
+[[example]]
+name = "echo"
+required-features = ["scheduler"]
 
 [dev-dependencies]
 tokio = { version = "1.17", features = ["full"] }

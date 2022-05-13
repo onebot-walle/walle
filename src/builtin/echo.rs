@@ -1,5 +1,5 @@
 use super::on_command;
-use crate::{handler_fn, MatcherHandler, Matcher, Session};
+use crate::{handler_fn, Matcher, MatcherHandler, Session};
 use async_trait::async_trait;
 use walle_core::MessageContent;
 
