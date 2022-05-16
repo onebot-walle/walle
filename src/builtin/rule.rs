@@ -1,5 +1,5 @@
 use crate::{rule_fn, Rule, Session};
-use walle_core::{EventContent, MessageContent, MessageSegment};
+use walle_core::{EventContent, MessageContent, MessageEventType, MessageSegment};
 
 pub struct UserIdChecker {
     pub user_id: String,
@@ -60,22 +60,34 @@ where
     }
 }
 
-pub fn start_with(word: &str) -> impl Rule<MessageContent> {
-    let word = word.to_string();
+pub fn start_with(pat: &str) -> impl Rule<MessageContent> {
+    let word = pat.to_string();
     rule_fn(move |session: &Session<MessageContent>| -> bool {
         session.event.content.alt_message.starts_with(&word)
     })
 }
 
-pub fn mention_me() -> impl Rule<MessageContent> {
-    rule_fn(|session: &Session<MessageContent>| -> bool {
-        for seg in session.event.content.message.iter() {
-            if let MessageSegment::Mention { user_id, .. } = seg {
-                if user_id == &session.bot.self_id {
-                    return true;
-                }
+fn _mention_me(session: &Session<MessageContent>) -> bool {
+    for seg in session.event.content.message.iter() {
+        if let MessageSegment::Mention { user_id, .. } = seg {
+            if user_id == &session.bot.self_id {
+                return true;
             }
         }
-        false
+    }
+    false
+}
+
+pub fn mention_me() -> impl Rule<MessageContent> {
+    rule_fn(_mention_me)
+}
+
+pub fn to_me() -> impl Rule<MessageContent> {
+    rule_fn(|session: &Session<MessageContent>| {
+        if let MessageEventType::Group { .. } = session.event.content.ty {
+            _mention_me(session)
+        } else {
+            true
+        }
     })
 }

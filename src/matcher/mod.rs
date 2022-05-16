@@ -39,6 +39,13 @@ pub trait MatcherHandlerExt<C>: MatcherHandler<C> {
     {
         pre.layer(self)
     }
+    fn pre_handle_before<P>(self, pre: P) -> LayeredPreHandler<P, Self>
+    where
+        Self: Sized,
+        P: PreHandler<C>,
+    {
+        pre.layer_before(self)
+    }
 }
 
 impl<C, H: MatcherHandler<C>> MatcherHandlerExt<C> for H {}
@@ -126,7 +133,7 @@ impl Session<MessageContent> {
         timeout: std::time::Duration,
     ) -> WalleResult<()> {
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-        let (name, temp) = TempMathcer::new(
+        let (name, temp) = temp_matcher(
             self.event.user_id().to_string(),
             self.event.group_id().map(ToString::to_string),
             tx,
@@ -161,38 +168,36 @@ impl Session<MessageContent> {
     }
 }
 
-pub struct TempMathcer {
+pub struct TempMatcher {
     pub tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
 }
 
 #[async_trait]
-impl MatcherHandler<EventContent> for TempMathcer {
+impl MatcherHandler<EventContent> for TempMatcher {
     async fn handle(&self, session: Session<EventContent>) {
         let event = session.event;
         self.tx.send(event.try_into().unwrap()).await.unwrap();
     }
 }
 
-impl TempMathcer {
-    pub fn new(
-        user_id: String,
-        group_id: Option<String>,
-        tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
-    ) -> (String, Matcher<EventContent>) {
-        use crate::builtin::{group_id_check, user_id_check};
-        let name = format!("{}-{:?}", user_id, group_id);
-        let matcher = user_id_check(user_id).layer(Self { tx });
-        (
-            name.clone(),
-            if let Some(group_id) = group_id {
-                Matcher::new(
-                    name,
-                    "".to_string(),
-                    group_id_check(group_id).layer(matcher),
-                )
-            } else {
-                Matcher::new(name, "".to_string(), matcher)
-            },
-        )
-    }
+pub fn temp_matcher(
+    user_id: String,
+    group_id: Option<String>,
+    tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
+) -> (String, Matcher<EventContent>) {
+    use crate::builtin::{group_id_check, user_id_check};
+    let name = format!("{}-{:?}", user_id, group_id);
+    let matcher = user_id_check(user_id).layer(TempMatcher { tx });
+    (
+        name.clone(),
+        if let Some(group_id) = group_id {
+            Matcher::new(
+                name,
+                "".to_string(),
+                group_id_check(group_id).layer(matcher),
+            )
+        } else {
+            Matcher::new(name, "".to_string(), matcher)
+        },
+    )
 }

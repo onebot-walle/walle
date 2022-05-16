@@ -94,7 +94,7 @@ where
     }
 
     pub async fn handle(&self, session: &Session<C>) {
-        if self.matcher._match(&session) {
+        if self.matcher._match(session) {
             let matcher = self.matcher.clone();
             let mut session = session.clone();
             tokio::spawn(async move {

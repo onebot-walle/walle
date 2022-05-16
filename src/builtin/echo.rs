@@ -12,29 +12,9 @@ impl MatcherHandler<MessageContent> for Echo {
     }
 }
 
-impl Echo {
-    pub fn new() -> Matcher<MessageContent> {
-        Matcher::new("echo", "echo description", on_command("echo", Echo))
-    }
+pub fn echo() -> Matcher<MessageContent> {
+    Matcher::new("echo", "echo description", on_command("echo", Echo))
 }
-
-// pub struct Echo2;
-
-// #[async_trait]
-// impl Handler<MessageContent> for Echo2 {
-//     fn _match(&self, session: &Session<MessageContent>) -> bool {
-//         if session.event.content.alt_message.starts_with("echo2") {
-//             return true;
-//         }
-//         false
-//     }
-//     async fn handle(&self, mut session: Session<MessageContent>) {
-//         let _ = session
-//             .get("input message", std::time::Duration::from_secs(10))
-//             .await;
-//         let _ = session.send(session.event.message().clone()).await;
-//     }
-// }
 
 pub fn echo2() -> Matcher<MessageContent> {
     Matcher::new(

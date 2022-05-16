@@ -1,4 +1,4 @@
-use walle_core::{MessageContent, MessageSegment};
+use walle_core::{MessageAlt, MessageContent, MessageSegment};
 
 use crate::{pre_handle_fn, PreHandler, Session};
 
@@ -30,27 +30,34 @@ where
 
 pub fn strip_whitespace() -> impl PreHandler<MessageContent> {
     pre_handle_fn(|session| {
-        let mut alt = session.alt_message();
-        while let Some(s) = alt.strip_prefix(" ") {
-            alt = s;
-        }
-        while let Some(s) = alt.strip_suffix(" ") {
-            alt = s;
-        }
-        *session.alt_message_mut() = alt.to_string();
         if let Some(MessageSegment::Text { text, .. }) = session.message_mut().first_mut() {
             let mut str: &str = text;
-            while let Some(s) = str.strip_prefix(" ") {
+            while let Some(s) = str.strip_prefix(' ') {
                 str = s;
             }
             *text = str.to_string();
         }
         if let Some(MessageSegment::Text { text, .. }) = session.message_mut().last_mut() {
             let mut str: &str = text;
-            while let Some(s) = str.strip_suffix(" ") {
+            while let Some(s) = str.strip_suffix(' ') {
                 str = s;
             }
             *text = str.to_string();
         }
+        *session.alt_message_mut() = session.message().alt();
+    })
+}
+
+pub fn remove_mention_me() -> impl PreHandler<MessageContent> {
+    pre_handle_fn(|session| {
+        for i in 0..session.message().len() {
+            if let MessageSegment::Mention { ref user_id, .. } = session.message()[i] {
+                if user_id == &session.event.self_id {
+                    session.message_mut().remove(i);
+                    break;
+                }
+            }
+        }
+        *session.alt_message_mut() = session.message().alt();
     })
 }
