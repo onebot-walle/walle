@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use walle_core::app::StandardArcBot;
 use walle_core::{
     BaseEvent, EventContent, IntoMessage, Message, MessageContent, Resps, WalleResult,
@@ -13,6 +15,8 @@ mod rule;
 pub use matchers::*;
 pub use pre_handle::*;
 pub use rule::*;
+
+use crate::MatcherConfig;
 
 #[async_trait]
 pub trait MatcherHandler<C>: Sync {
@@ -83,14 +87,21 @@ where
 pub struct Session<C> {
     pub bot: walle_core::app::StandardArcBot,
     pub event: walle_core::event::BaseEvent<C>,
+    pub config: Arc<RwLock<MatcherConfig>>,
     temp_matchers: TempMatchers,
 }
 
 impl<C> Session<C> {
-    pub fn new(bot: StandardArcBot, event: BaseEvent<C>, temp_plugins: TempMatchers) -> Self {
+    pub fn new(
+        bot: StandardArcBot,
+        event: BaseEvent<C>,
+        config: Arc<RwLock<MatcherConfig>>,
+        temp_plugins: TempMatchers,
+    ) -> Self {
         Self {
             bot,
             event,
+            config,
             temp_matchers: temp_plugins,
         }
     }
@@ -104,8 +115,9 @@ impl Session<EventContent> {
     pub fn as_message_session(self) -> Option<Session<MessageContent>> {
         if let Ok(event) = self.event.try_into() {
             Some(Session {
-                bot: self.bot,
                 event,
+                bot: self.bot,
+                config: self.config,
                 temp_matchers: self.temp_matchers,
             })
         } else {

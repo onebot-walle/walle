@@ -947,6 +947,7 @@ name = "walle"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "serde",
  "time 0.3.9",
  "tokio",
  "tokio-cron-scheduler",

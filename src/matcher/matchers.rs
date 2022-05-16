@@ -1,8 +1,8 @@
-use crate::{MatcherHandler, Session};
+use crate::{MatcherConfig, MatcherHandler, Session};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use walle_core::app::StandardArcBot;
 use walle_core::{
     EventContent, EventHandler, MessageContent, MetaContent, NoticeContent, RequestContent, Resps,
@@ -17,12 +17,16 @@ pub struct Matchers {
     pub notice: Vec<Matcher<NoticeContent>>,
     pub request: Vec<Matcher<RequestContent>>,
     pub meta: Vec<Matcher<MetaContent>>,
+    pub config: Arc<RwLock<MatcherConfig>>,
     temp: TempMatchers,
 }
 
 impl Matchers {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn new(config: MatcherConfig) -> Self {
+        Self {
+            config: Arc::new(RwLock::new(config)),
+            ..Default::default()
+        }
     }
     pub fn add_message_matcher(mut self, plugin: Matcher<MessageContent>) -> Self {
         self.message.push(plugin);
@@ -45,7 +49,7 @@ impl Matchers {
 #[async_trait]
 impl EventHandler<StandardEvent, StandardAction, Resps> for Matchers {
     async fn handle(&self, bot: StandardArcBot, event: StandardEvent) {
-        let session = Session::new(bot, event, self.temp.clone());
+        let session = Session::new(bot, event, self.config.clone(), self.temp.clone());
         if let Some(p) = {
             let mut temp_plugins = self.temp.lock().await;
             let mut found: Option<String> = None;
@@ -62,7 +66,7 @@ impl EventHandler<StandardEvent, StandardAction, Resps> for Matchers {
         }
         let (bot, event) = (session.bot, session.event);
         if let Ok(event) = event.try_into() {
-            let session = Session::new(bot, event, self.temp.clone());
+            let session = Session::new(bot, event, self.config.clone(), self.temp.clone());
             for plugin in &self.message {
                 plugin.handle(&session).await;
             }

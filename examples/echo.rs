@@ -6,7 +6,7 @@ use walle_core::AppConfig;
 
 #[tokio::main]
 async fn main() {
-    let matchers = Matchers::new()
+    let matchers = Matchers::default()
         .add_message_matcher(echo())
         .add_message_matcher(echo2());
     let walle = new_walle(AppConfig::default(), matchers);

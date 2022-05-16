@@ -3,10 +3,12 @@ use std::sync::Arc;
 use walle_core::AppConfig;
 
 pub mod builtin;
+mod config;
 mod matcher;
 #[cfg(feature = "scheduler")]
 mod scheduler;
 
+pub use config::*;
 pub use matcher::*;
 #[cfg(feature = "scheduler")]
 pub use scheduler::*;
