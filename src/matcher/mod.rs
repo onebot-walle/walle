@@ -1,86 +1,71 @@
 use async_trait::async_trait;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use walle_core::app::StandardArcBot;
 use walle_core::{
     BaseEvent, EventContent, IntoMessage, Message, MessageContent, Resps, WalleResult,
 };
 
+mod handle;
 mod matchers;
 mod pre_handle;
 mod rule;
 
+pub use handle::*;
 pub use matchers::*;
 pub use pre_handle::*;
 pub use rule::*;
 
 use crate::MatcherConfig;
 
-#[async_trait]
-pub trait MatcherHandler<C>: Sync {
-    fn _match(&self, _session: &Session<C>) -> bool {
-        true
-    }
-    /// if matched will be called before handle, should never fail
-    fn _pre_handle(&self, _session: &mut Session<C>) -> bool {
-        true
-    }
-    async fn handle(&self, session: Session<C>);
+#[derive(Clone)]
+pub struct Matcher<C> {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub matcher: Arc<dyn MatcherHandler<C> + Sync + Send + 'static>,
 }
 
-pub trait MatcherHandlerExt<C>: MatcherHandler<C> {
-    fn rule<R>(self, rule: R) -> LayeredRule<R, Self>
-    where
-        Self: Sized,
-        R: Rule<C>,
-    {
-        rule.layer(self)
-    }
-    fn pre_handle<P>(self, pre: P, as_rule: bool) -> LayeredPreHandler<P, Self>
-    where
-        Self: Sized,
-        P: PreHandler<C>,
-    {
-        pre.layer(self, as_rule)
-    }
-    fn pre_handle_before<P>(self, pre: P, as_rule: bool) -> LayeredPreHandler<P, Self>
-    where
-        Self: Sized,
-        P: PreHandler<C>,
-    {
-        pre.layer_before(self, as_rule)
-    }
-}
-
-impl<C, H: MatcherHandler<C>> MatcherHandlerExt<C> for H {}
-
-pub struct HandlerFn<I>(I);
-
-pub fn handler_fn<I, C, Fut>(inner: I) -> HandlerFn<I>
+impl<C> Matcher<C>
 where
-    I: Fn(Session<C>) -> Fut + Send + Sync,
-    Fut: Future<Output = ()> + Send,
-    C: Sync + Send + 'static,
+    C: Clone + Send + Sync + 'static,
 {
-    HandlerFn(inner)
-}
+    pub fn new(
+        name: &'static str,
+        description: &'static str,
+        matcher: impl MatcherHandler<C> + Sync + Send + 'static,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            matcher: Arc::new(matcher),
+        }
+    }
 
-impl<C, I, Fut> MatcherHandler<C> for HandlerFn<I>
-where
-    C: Sync + Send + 'static,
-    I: Fn(Session<C>) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = ()> + Send + 'static,
-{
-    fn handle<'a, 'b>(
-        &'a self,
-        session: Session<C>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'b>>
+    pub fn new_with<H0, H1, F>(
+        name: &'static str,
+        description: &'static str,
+        matcher: H0,
+        f: F,
+    ) -> Self
     where
-        'a: 'b,
-        Self: 'b,
+        H0: MatcherHandler<C> + Sync + Send + 'static,
+        H1: MatcherHandler<C> + Sync + Send + 'static,
+        F: FnOnce(H0) -> H1,
     {
-        Box::pin(self.0(session))
+        Self {
+            name,
+            description,
+            matcher: Arc::new(f(matcher)),
+        }
+    }
+
+    pub async fn call(&self, session: &Session<C>) {
+        if self.matcher._match(session) {
+            let mut session = session.clone();
+            if self.matcher._pre_handle(&mut session) {
+                let matcher = self.matcher.clone();
+                tokio::spawn(async move { matcher.handle(session).await });
+            }
+        }
     }
 }
 
@@ -105,10 +90,6 @@ impl<C> Session<C> {
             config,
             temp_matchers: temp_plugins,
         }
-    }
-
-    pub fn replace_evnet(&mut self, event: BaseEvent<C>) {
-        self.event = event;
     }
 }
 
@@ -155,7 +136,7 @@ impl Session<MessageContent> {
         self.send(message).await?;
         match tokio::time::timeout(timeout, rx.recv()).await {
             Ok(Some(event)) => {
-                self.replace_evnet(event);
+                self.event = event;
             }
             _ => {
                 self.temp_matchers.lock().await.remove(&name);
@@ -199,18 +180,55 @@ pub fn temp_matcher(
     tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
 ) -> (String, Matcher<EventContent>) {
     use crate::builtin::{group_id_check, user_id_check};
-    let name = format!("{}-{:?}", user_id, group_id);
-    let matcher = user_id_check(user_id).layer(TempMatcher { tx });
+    let matcher = user_id_check(&user_id).layer(TempMatcher { tx });
     (
-        name.clone(),
+        format!("{}-{:?}", user_id, group_id),
         if let Some(group_id) = group_id {
-            Matcher::new(
-                name,
-                "".to_string(),
-                group_id_check(group_id).layer(matcher),
-            )
+            Matcher::new("", "", group_id_check(group_id).layer(matcher))
         } else {
-            Matcher::new(name, "".to_string(), matcher)
+            Matcher::new("", "", matcher)
         },
     )
+}
+
+pub struct MatcherBuilder<H> {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub matcher: H,
+}
+
+impl<H> MatcherBuilder<H> {
+    pub fn new<C>(name: &'static str, description: &'static str, matcher: H) -> Self
+    where
+        H: MatcherHandler<C> + Sync + Send + 'static,
+        C: Clone + Send + Sync + 'static,
+    {
+        Self {
+            name,
+            description,
+            matcher,
+        }
+    }
+
+    pub fn map<F, C, H1>(self, f: F) -> MatcherBuilder<H1>
+    where
+        F: FnOnce(H) -> H1,
+        H: MatcherHandler<C> + Sync + Send + 'static,
+        H1: MatcherHandler<C> + Sync + Send + 'static,
+        C: Clone + Send + Sync + 'static,
+    {
+        MatcherBuilder {
+            name: self.name,
+            description: self.description,
+            matcher: f(self.matcher),
+        }
+    }
+
+    pub fn build<C>(self) -> Matcher<C>
+    where
+        H: MatcherHandler<C> + Sync + Send + 'static,
+        C: Clone + Send + Sync + 'static,
+    {
+        Matcher::new(self.name, self.description, self.matcher)
+    }
 }

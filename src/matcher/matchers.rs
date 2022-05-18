@@ -1,12 +1,13 @@
-use crate::{MatcherConfig, MatcherHandler, Session};
+use super::{Matcher, Session};
+use crate::MatcherConfig;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use walle_core::app::StandardArcBot;
 use walle_core::{
-    EventContent, EventHandler, MessageContent, MetaContent, NoticeContent, RequestContent, Resps,
-    StandardAction, StandardEvent,
+    BaseEvent, EventContent, EventHandler, MessageContent, MetaContent, NoticeContent,
+    RequestContent, Resps, StandardAction, StandardEvent,
 };
 
 pub(crate) type TempMatchers = Arc<Mutex<HashMap<String, Matcher<EventContent>>>>;
@@ -44,6 +45,28 @@ impl Matchers {
         self.meta.push(plugin);
         self
     }
+    async fn _event_call<C>(
+        &self,
+        bot: &StandardArcBot,
+        event: StandardEvent,
+        matchers: &Vec<Matcher<C>>,
+    ) -> Option<StandardEvent>
+    where
+        BaseEvent<C>: TryFrom<StandardEvent, Error = StandardEvent>,
+        C: Clone + Send + Sync + 'static,
+    {
+        match event.try_into() {
+            Ok(event) => {
+                let session =
+                    Session::new(bot.clone(), event, self.config.clone(), self.temp.clone());
+                for matcher in matchers {
+                    matcher.call(&session).await;
+                }
+                None
+            }
+            Err(event) => Some(event),
+        }
+    }
 }
 
 #[async_trait]
@@ -65,60 +88,12 @@ impl EventHandler<StandardEvent, StandardAction, Resps> for Matchers {
             return;
         }
         let (bot, event) = (session.bot, session.event);
-        if let Ok(event) = event.try_into() {
-            let session = Session::new(bot, event, self.config.clone(), self.temp.clone());
-            for plugin in &self.message {
-                plugin.handle(&session).await;
+        if let Some(event) = self._event_call(&bot, event, &self.message).await {
+            if let Some(event) = self._event_call(&bot, event, &self.meta).await {
+                if let Some(event) = self._event_call(&bot, event, &self.notice).await {
+                    self._event_call(&bot, event, &self.request).await;
+                }
             }
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct Matcher<C> {
-    pub name: String,
-    pub description: String,
-    pub matcher: Arc<dyn MatcherHandler<C> + Sync + Send + 'static>,
-}
-
-impl<C> Matcher<C>
-where
-    C: Clone + Send + Sync + 'static,
-{
-    pub fn new<T0: ToString, T1: ToString>(
-        name: T0,
-        description: T1,
-        matcher: impl MatcherHandler<C> + Sync + Send + 'static,
-    ) -> Self {
-        Self {
-            name: name.to_string(),
-            description: description.to_string(),
-            matcher: Arc::new(matcher),
-        }
-    }
-
-    pub fn new_with<T0, T1, H0, H1, F>(name: T0, description: T1, matcher: H0, f: F) -> Self
-    where
-        T0: ToString,
-        T1: ToString,
-        H0: MatcherHandler<C> + Sync + Send + 'static,
-        H1: MatcherHandler<C> + Sync + Send + 'static,
-        F: FnOnce(H0) -> H1,
-    {
-        Self {
-            name: name.to_string(),
-            description: description.to_string(),
-            matcher: Arc::new(f(matcher)),
-        }
-    }
-
-    pub async fn handle(&self, session: &Session<C>) {
-        if self.matcher._match(session) {
-            let mut session = session.clone();
-            if self.matcher._pre_handle(&mut session) {
-                let matcher = self.matcher.clone();
-                tokio::spawn(async move { matcher.handle(session).await });
-            }
-        }
+        } // ugly..
     }
 }

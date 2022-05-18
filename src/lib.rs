@@ -5,6 +5,7 @@ use walle_core::AppConfig;
 pub mod builtin;
 mod config;
 mod matcher;
+mod utils;
 #[cfg(feature = "scheduler")]
 mod scheduler;
 

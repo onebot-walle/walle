@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin};
 
 use super::on_command;
-use crate::{handler_fn, Matcher, MatcherHandler, Session};
+use crate::{handler_fn, MatcherBuilder, MatcherHandler, Session};
 use async_trait::async_trait;
 use walle_core::MessageContent;
 
@@ -14,8 +14,8 @@ impl MatcherHandler<MessageContent> for Echo {
     }
 }
 
-pub fn echo() -> Matcher<MessageContent> {
-    Matcher::new("echo", "echo description", on_command("echo", Echo))
+pub fn echo() -> MatcherBuilder<impl MatcherHandler<MessageContent>> {
+    MatcherBuilder::new("echo", "echo description", on_command("echo", Echo))
 }
 
 fn _echo2(
@@ -29,8 +29,8 @@ fn _echo2(
     })
 }
 
-pub fn echo2() -> Matcher<MessageContent> {
-    Matcher::new(
+pub fn echo2() -> MatcherBuilder<impl MatcherHandler<MessageContent>> {
+    MatcherBuilder::new(
         "echo2",
         "echo2 description",
         on_command("echo2", handler_fn(_echo2)),

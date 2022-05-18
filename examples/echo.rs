@@ -1,18 +1,14 @@
 use walle::{
-    builtin::{on_command, on_to_me, Echo},
-    new_walle, Matcher, Matchers, OneMinutePassed, Scheduler,
+    builtin::{echo, echo2, on_to_me},
+    new_walle, Matchers, OneMinutePassed, Scheduler,
 };
 use walle_core::AppConfig;
 
 #[tokio::main]
 async fn main() {
-    let matchers = Matchers::default().add_message_matcher(Matcher::new_with(
-        "echo to me",
-        "description",
-        on_command("echo", Echo),
-        |h| on_to_me(h),
-    ));
-    // .add_message_matcher(echo2());
+    let matchers = Matchers::default()
+        .add_message_matcher(echo().map(|h| on_to_me(h)).build())
+        .add_message_matcher(echo2().build());
     let walle = new_walle(AppConfig::default(), matchers);
     let mut sche = Scheduler::new(walle.clone());
     sche.add(OneMinutePassed);
