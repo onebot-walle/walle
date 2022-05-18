@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use walle_core::app::StandardArcBot;
 use walle_core::{
     BaseEvent, EventContent, IntoMessage, Message, MessageContent, Resps, WalleResult,
@@ -24,7 +23,9 @@ pub trait MatcherHandler<C>: Sync {
         true
     }
     /// if matched will be called before handle, should never fail
-    fn _pre_handle(&self, _session: &mut Session<C>) {}
+    fn _pre_handle(&self, _session: &mut Session<C>) -> bool {
+        true
+    }
     async fn handle(&self, session: Session<C>);
 }
 
@@ -36,19 +37,19 @@ pub trait MatcherHandlerExt<C>: MatcherHandler<C> {
     {
         rule.layer(self)
     }
-    fn pre_handle<P>(self, pre: P) -> LayeredPreHandler<P, Self>
+    fn pre_handle<P>(self, pre: P, as_rule: bool) -> LayeredPreHandler<P, Self>
     where
         Self: Sized,
         P: PreHandler<C>,
     {
-        pre.layer(self)
+        pre.layer(self, as_rule)
     }
-    fn pre_handle_before<P>(self, pre: P) -> LayeredPreHandler<P, Self>
+    fn pre_handle_before<P>(self, pre: P, as_rule: bool) -> LayeredPreHandler<P, Self>
     where
         Self: Sized,
         P: PreHandler<C>,
     {
-        pre.layer_before(self)
+        pre.layer_before(self, as_rule)
     }
 }
 
@@ -87,7 +88,7 @@ where
 pub struct Session<C> {
     pub bot: walle_core::app::StandardArcBot,
     pub event: walle_core::event::BaseEvent<C>,
-    pub config: Arc<RwLock<MatcherConfig>>,
+    pub config: Arc<MatcherConfig>,
     temp_matchers: TempMatchers,
 }
 
@@ -95,7 +96,7 @@ impl<C> Session<C> {
     pub fn new(
         bot: StandardArcBot,
         event: BaseEvent<C>,
-        config: Arc<RwLock<MatcherConfig>>,
+        config: Arc<MatcherConfig>,
         temp_plugins: TempMatchers,
     ) -> Self {
         Self {

@@ -68,6 +68,13 @@ pub fn start_with(pat: &str) -> impl Rule<MessageContent> {
 }
 
 fn _mention_me(session: &Session<MessageContent>) -> bool {
+    if let Some(MessageSegment::Text { text, .. }) = session.message().first() {
+        for nickname in &session.config.nicknames {
+            if text.starts_with(nickname) {
+                return true;
+            }
+        }
+    }
     for seg in session.event.content.message.iter() {
         if let MessageSegment::Mention { user_id, .. } = seg {
             if user_id == &session.bot.self_id {

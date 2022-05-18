@@ -30,7 +30,7 @@ where
     fn _match(&self, session: &Session<C>) -> bool {
         self.rule.rule(session) && self.handler._match(session)
     }
-    fn _pre_handle(&self, session: &mut Session<C>) {
+    fn _pre_handle(&self, session: &mut Session<C>) -> bool {
         self.handler._pre_handle(session)
     }
     fn handle<'a, 't>(

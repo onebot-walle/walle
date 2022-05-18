@@ -2,7 +2,7 @@ use crate::{MatcherConfig, MatcherHandler, Session};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use walle_core::app::StandardArcBot;
 use walle_core::{
     EventContent, EventHandler, MessageContent, MetaContent, NoticeContent, RequestContent, Resps,
@@ -17,14 +17,14 @@ pub struct Matchers {
     pub notice: Vec<Matcher<NoticeContent>>,
     pub request: Vec<Matcher<RequestContent>>,
     pub meta: Vec<Matcher<MetaContent>>,
-    pub config: Arc<RwLock<MatcherConfig>>,
+    pub config: Arc<MatcherConfig>,
     temp: TempMatchers,
 }
 
 impl Matchers {
     pub fn new(config: MatcherConfig) -> Self {
         Self {
-            config: Arc::new(RwLock::new(config)),
+            config: Arc::new(config),
             ..Default::default()
         }
     }
@@ -97,14 +97,28 @@ where
         }
     }
 
+    pub fn new_with<T0, T1, H0, H1, F>(name: T0, description: T1, matcher: H0, f: F) -> Self
+    where
+        T0: ToString,
+        T1: ToString,
+        H0: MatcherHandler<C> + Sync + Send + 'static,
+        H1: MatcherHandler<C> + Sync + Send + 'static,
+        F: FnOnce(H0) -> H1,
+    {
+        Self {
+            name: name.to_string(),
+            description: description.to_string(),
+            matcher: Arc::new(f(matcher)),
+        }
+    }
+
     pub async fn handle(&self, session: &Session<C>) {
         if self.matcher._match(session) {
-            let matcher = self.matcher.clone();
             let mut session = session.clone();
-            tokio::spawn(async move {
-                matcher._pre_handle(&mut session);
-                matcher.handle(session).await
-            });
+            if self.matcher._pre_handle(&mut session) {
+                let matcher = self.matcher.clone();
+                tokio::spawn(async move { matcher.handle(session).await });
+            }
         }
     }
 }
