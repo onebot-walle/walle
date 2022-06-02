@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
-use walle_core::AppConfig;
+use walle_core::config::AppConfig;
 
-pub mod builtin;
-mod config;
 mod matcher;
-mod utils;
 #[cfg(feature = "scheduler")]
 mod scheduler;
+mod utils;
+
+pub mod builtin;
+pub mod config;
 
 pub use config::*;
 pub use matcher::*;
@@ -15,6 +16,7 @@ pub use matcher::*;
 pub use scheduler::*;
 
 pub type Walle = Arc<walle_core::app::StandardOneBot<Matchers>>;
+pub type MessageContent = walle_core::event::MessageContent<walle_core::event::MessageEventDetail>;
 
 pub fn new_walle(config: AppConfig, matchers: Matchers) -> Walle {
     let timer = tracing_subscriber::fmt::time::OffsetTime::new(

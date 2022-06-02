@@ -1,8 +1,8 @@
 use walle::{
     builtin::{echo, echo2, on_to_me},
+    config::AppConfig,
     new_walle, Matchers, OneMinutePassed, Scheduler,
 };
-use walle_core::AppConfig;
 
 #[tokio::main]
 async fn main() {

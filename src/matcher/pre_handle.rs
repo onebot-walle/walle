@@ -4,6 +4,7 @@ use std::pin::Pin;
 
 pub trait PreHandler<C> {
     fn pre_handle(&self, session: &mut Session<C>) -> bool;
+    fn _handle(&self, _session: &Session<C>) {}
     fn layer<H>(self, handler: H, as_rule: bool) -> LayeredPreHandler<Self, H>
     where
         Self: Sized,
@@ -69,6 +70,7 @@ where
         'a: 't,
         Self: 't,
     {
+        self.pre._handle(&session);
         self.handler.handle(session)
     }
 }

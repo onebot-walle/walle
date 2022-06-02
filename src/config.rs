@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+pub use walle_core::config::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct MatcherConfig {

@@ -4,6 +4,7 @@ use std::pin::Pin;
 
 pub trait Rule<C> {
     fn rule(&self, session: &Session<C>) -> bool;
+    fn _handle(&self, _session: &Session<C>) {}
     fn layer<H>(self, handler: H) -> LayeredRule<Self, H>
     where
         Self: Sized,
@@ -41,6 +42,7 @@ where
         'a: 't,
         Self: 't,
     {
+        self.rule._handle(&session);
         self.handler.handle(session)
     }
 }

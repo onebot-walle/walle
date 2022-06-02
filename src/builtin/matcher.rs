@@ -1,7 +1,5 @@
-use walle_core::MessageContent;
-
 use super::*;
-use crate::{MatcherHandler, MatcherHandlerExt};
+use crate::{MatcherHandler, MatcherHandlerExt, MessageContent};
 
 pub fn on_command<H>(command: &str, handler: H) -> impl MatcherHandler<MessageContent>
 where

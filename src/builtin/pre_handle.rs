@@ -1,6 +1,6 @@
-use walle_core::{MessageAlt, MessageContent, MessageEventType, MessageSegment};
+use walle_core::{MessageAlt, MessageEventDetail, MessageSegment};
 
-use crate::{pre_handle_fn, PreHandler, Session};
+use crate::{pre_handle_fn, MessageContent, PreHandler, Session};
 
 fn update_alt(session: &mut Session<MessageContent>) -> bool {
     *session.alt_message_mut() = session.message().alt();
@@ -100,7 +100,7 @@ pub fn remove_nickname() -> impl PreHandler<MessageContent> {
 
 pub fn remote_to_me() -> impl PreHandler<MessageContent> {
     pre_handle_fn(|session: &mut Session<MessageContent>| {
-        if let MessageEventType::Private = session.event.content.ty {
+        if let MessageEventDetail::Private { .. } = session.event.content.detail {
             return true;
         } else {
             return _remove_nickname(session) || _remove_mention_me(session);

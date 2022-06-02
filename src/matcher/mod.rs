@@ -1,16 +1,21 @@
 use async_trait::async_trait;
 use std::sync::Arc;
+use walle_core::action::BotActionExt;
 use walle_core::app::StandardArcBot;
+use walle_core::resp::SendMessageRespContent;
 use walle_core::{
-    BaseEvent, EventContent, IntoMessage, Message, MessageContent, Resps, WalleResult,
+    BaseEvent, EventContent, IntoMessage, Message, MessageContent, MessageEventDetail, Resp,
+    WalleResult,
 };
 
 mod handle;
+mod hook;
 mod matchers;
 mod pre_handle;
 mod rule;
 
 pub use handle::*;
+pub use hook::*;
 pub use matchers::*;
 pub use pre_handle::*;
 pub use rule::*;
@@ -21,7 +26,7 @@ use crate::MatcherConfig;
 pub struct Matcher<C> {
     pub name: &'static str,
     pub description: &'static str,
-    pub matcher: Arc<dyn MatcherHandler<C> + Sync + Send + 'static>,
+    pub handler: Arc<dyn MatcherHandler<C> + Sync + Send + 'static>,
 }
 
 impl<C> Matcher<C>
@@ -31,19 +36,19 @@ where
     pub fn new(
         name: &'static str,
         description: &'static str,
-        matcher: impl MatcherHandler<C> + Sync + Send + 'static,
+        handler: impl MatcherHandler<C> + Sync + Send + 'static,
     ) -> Self {
         Self {
             name,
             description,
-            matcher: Arc::new(matcher),
+            handler: Arc::new(handler),
         }
     }
 
     pub fn new_with<H0, H1, F>(
         name: &'static str,
         description: &'static str,
-        matcher: H0,
+        handler: H0,
         f: F,
     ) -> Self
     where
@@ -54,15 +59,15 @@ where
         Self {
             name,
             description,
-            matcher: Arc::new(f(matcher)),
+            handler: Arc::new(f(handler)),
         }
     }
 
     pub async fn call(&self, session: &Session<C>) {
-        if self.matcher._match(session) {
+        if self.handler._match(session) {
             let mut session = session.clone();
-            if self.matcher._pre_handle(&mut session) {
-                let matcher = self.matcher.clone();
+            if self.handler._pre_handle(&mut session) {
+                let matcher = self.handler.clone();
                 tokio::spawn(async move { matcher.handle(session).await });
             }
         }
@@ -94,7 +99,7 @@ impl<C> Session<C> {
 }
 
 impl Session<EventContent> {
-    pub fn as_message_session(self) -> Option<Session<MessageContent>> {
+    pub fn as_message_session(self) -> Option<Session<MessageContent<MessageEventDetail>>> {
         if let Ok(event) = self.event.try_into() {
             Some(Session {
                 event,
@@ -108,15 +113,18 @@ impl Session<EventContent> {
     }
 }
 
-impl Session<MessageContent> {
-    pub async fn send<T: IntoMessage>(&self, message: T) -> WalleResult<Resps> {
+impl Session<MessageContent<MessageEventDetail>> {
+    pub async fn send<T: IntoMessage>(
+        &self,
+        message: T,
+    ) -> WalleResult<Resp<SendMessageRespContent>> {
         if let Some(group_id) = self.event.group_id() {
             self.bot
-                .send_group_message(group_id.to_string(), message.into_message())
+                .send_group_msg(group_id.to_string(), message.into_message())
                 .await
         } else {
             self.bot
-                .send_private_message(self.event.user_id().to_string(), message.into_message())
+                .send_private_msg(self.event.user_id().to_string(), message.into_message())
                 .await
         }
     }
@@ -163,7 +171,7 @@ impl Session<MessageContent> {
 }
 
 pub struct TempMatcher {
-    pub tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
+    pub tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent<MessageEventDetail>>>,
 }
 
 #[async_trait]
@@ -177,7 +185,7 @@ impl MatcherHandler<EventContent> for TempMatcher {
 pub fn temp_matcher(
     user_id: String,
     group_id: Option<String>,
-    tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
+    tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent<MessageEventDetail>>>,
 ) -> (String, Matcher<EventContent>) {
     use crate::builtin::{group_id_check, user_id_check};
     let matcher = user_id_check(&user_id).layer(TempMatcher { tx });
