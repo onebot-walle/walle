@@ -98,7 +98,7 @@ pub fn remove_nickname() -> impl PreHandler<MessageContent> {
     pre_handle_fn(_remove_nickname)
 }
 
-pub fn remote_to_me() -> impl PreHandler<MessageContent> {
+pub fn remove_to_me() -> impl PreHandler<MessageContent> {
     pre_handle_fn(|session: &mut Session<MessageContent>| {
         if let MessageEventDetail::Private { .. } = session.event.content.detail {
             return true;

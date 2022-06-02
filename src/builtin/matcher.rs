@@ -32,5 +32,5 @@ where
 {
     handler
         .pre_handle_before(strip_whitespace(), false)
-        .pre_handle_before(remote_to_me(), true)
+        .pre_handle_before(remove_to_me(), true)
 }
