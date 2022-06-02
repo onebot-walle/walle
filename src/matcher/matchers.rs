@@ -1,20 +1,20 @@
 use super::{Matcher, Session};
-use crate::{MatcherConfig, MatchersHook};
+use crate::{MatcherConfig, MatchersHook, MessageContent};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use walle_core::app::StandardArcBot;
 use walle_core::{
-    BaseEvent, EventContent, EventHandler, MessageContent, MessageEventDetail, MetaContent,
-    NoticeContent, RequestContent, Resps, StandardAction, StandardEvent,
+    BaseEvent, EventContent, EventHandler, MetaContent, NoticeContent, RequestContent, Resps,
+    StandardAction, StandardEvent,
 };
 
 pub(crate) type TempMatchers = Arc<Mutex<HashMap<String, Matcher<EventContent>>>>;
 
 #[derive(Default)]
 pub struct Matchers {
-    pub message: Vec<Matcher<MessageContent<MessageEventDetail>>>,
+    pub message: Vec<Matcher<MessageContent>>,
     pub notice: Vec<Matcher<NoticeContent>>,
     pub request: Vec<Matcher<RequestContent>>,
     pub meta: Vec<Matcher<MetaContent>>,
@@ -30,10 +30,7 @@ impl Matchers {
             ..Default::default()
         }
     }
-    pub fn add_message_matcher(
-        mut self,
-        plugin: Matcher<MessageContent<MessageEventDetail>>,
-    ) -> Self {
+    pub fn add_message_matcher(mut self, plugin: Matcher<MessageContent>) -> Self {
         self.message.push(plugin);
         self
     }

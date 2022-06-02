@@ -3,10 +3,9 @@ use std::sync::Arc;
 use walle_core::action::BotActionExt;
 use walle_core::app::StandardArcBot;
 use walle_core::resp::SendMessageRespContent;
-use walle_core::{
-    BaseEvent, EventContent, IntoMessage, Message, MessageContent, MessageEventDetail, Resp,
-    WalleResult,
-};
+use walle_core::{BaseEvent, EventContent, IntoMessage, Message, Resp, WalleResult};
+
+use crate::MessageContent;
 
 mod handle;
 mod hook;
@@ -99,7 +98,7 @@ impl<C> Session<C> {
 }
 
 impl Session<EventContent> {
-    pub fn as_message_session(self) -> Option<Session<MessageContent<MessageEventDetail>>> {
+    pub fn as_message_session(self) -> Option<Session<MessageContent>> {
         if let Ok(event) = self.event.try_into() {
             Some(Session {
                 event,
@@ -113,7 +112,7 @@ impl Session<EventContent> {
     }
 }
 
-impl Session<MessageContent<MessageEventDetail>> {
+impl Session<MessageContent> {
     pub async fn send<T: IntoMessage>(
         &self,
         message: T,
@@ -171,7 +170,7 @@ impl Session<MessageContent<MessageEventDetail>> {
 }
 
 pub struct TempMatcher {
-    pub tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent<MessageEventDetail>>>,
+    pub tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
 }
 
 #[async_trait]
@@ -185,7 +184,7 @@ impl MatcherHandler<EventContent> for TempMatcher {
 pub fn temp_matcher(
     user_id: String,
     group_id: Option<String>,
-    tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent<MessageEventDetail>>>,
+    tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
 ) -> (String, Matcher<EventContent>) {
     use crate::builtin::{group_id_check, user_id_check};
     let matcher = user_id_check(&user_id).layer(TempMatcher { tx });

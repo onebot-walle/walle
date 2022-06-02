@@ -11,11 +11,11 @@ license = "MIT"
 scheduler = ["tokio-cron-scheduler"]
 
 [dependencies]
-# walle-core = { version = "0.4.0-beta.5", features = ["websocket", "app"] }
-walle-core = { git = "https://github.com/abrahum/Walle-core.git", commit = "af94786", features = [
-    "websocket",
-    "app",
-] }
+walle-core = { version = "0.4.0", features = ["websocket", "app"] }
+# walle-core = { git = "https://github.com/abrahum/Walle-core.git", commit = "af94786", features = [
+#     "websocket",
+#     "app",
+# ] }
 async-trait = "0.1"
 tokio = "1.17"
 tracing-subscriber = { version = "0.3.9", features = [

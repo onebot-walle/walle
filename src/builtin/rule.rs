@@ -1,12 +1,12 @@
-use crate::{rule_fn, Rule, Session};
-use walle_core::{EventContent, MessageContent, MessageEventDetail, MessageSegment};
+use crate::{rule_fn, MessageContent, Rule, Session};
+use walle_core::{EventContent, MessageEventDetail, MessageSegment};
 
 pub struct UserIdChecker {
     pub user_id: String,
 }
 
-impl Rule<MessageContent<MessageEventDetail>> for UserIdChecker {
-    fn rule(&self, session: &Session<MessageContent<MessageEventDetail>>) -> bool {
+impl Rule<MessageContent> for UserIdChecker {
+    fn rule(&self, session: &Session<MessageContent>) -> bool {
         session.event.user_id() == self.user_id
     }
 }
@@ -34,8 +34,8 @@ pub struct GroupIdChecker {
     pub group_id: String,
 }
 
-impl Rule<MessageContent<MessageEventDetail>> for GroupIdChecker {
-    fn rule(&self, session: &Session<MessageContent<MessageEventDetail>>) -> bool {
+impl Rule<MessageContent> for GroupIdChecker {
+    fn rule(&self, session: &Session<MessageContent>) -> bool {
         session.event.group_id() == Some(&self.group_id)
     }
 }
@@ -60,16 +60,14 @@ where
     }
 }
 
-pub fn start_with(pat: &str) -> impl Rule<MessageContent<MessageEventDetail>> {
+pub fn start_with(pat: &str) -> impl Rule<MessageContent> {
     let word = pat.to_string();
-    rule_fn(
-        move |session: &Session<MessageContent<MessageEventDetail>>| -> bool {
-            session.event.content.alt_message.starts_with(&word)
-        },
-    )
+    rule_fn(move |session: &Session<MessageContent>| -> bool {
+        session.event.content.alt_message.starts_with(&word)
+    })
 }
 
-fn _mention_me(session: &Session<MessageContent<MessageEventDetail>>) -> bool {
+fn _mention_me(session: &Session<MessageContent>) -> bool {
     if let Some(MessageSegment::Text { text, .. }) = session.message().first() {
         for nickname in &session.config.nicknames {
             if text.starts_with(nickname) {
@@ -87,12 +85,12 @@ fn _mention_me(session: &Session<MessageContent<MessageEventDetail>>) -> bool {
     false
 }
 
-pub fn mention_me() -> impl Rule<MessageContent<MessageEventDetail>> {
+pub fn mention_me() -> impl Rule<MessageContent> {
     rule_fn(_mention_me)
 }
 
-pub fn to_me() -> impl Rule<MessageContent<MessageEventDetail>> {
-    rule_fn(|session: &Session<MessageContent<MessageEventDetail>>| {
+pub fn to_me() -> impl Rule<MessageContent> {
+    rule_fn(|session: &Session<MessageContent>| {
         if let MessageEventDetail::Group { .. } = session.event.content.detail {
             _mention_me(session)
         } else {

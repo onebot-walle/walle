@@ -974,8 +974,9 @@ dependencies = [
 
 [[package]]
 name = "walle-core"
-version = "0.4.0-beta.5"
-source = "git+https://github.com/abrahum/Walle-core.git#af94786b52841acdab54f2088fb5b842bcb90980"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7111684df87f054ffbbba484bc6c7dbac8b2936e557216dcc5a59e8242dd81ca"
 dependencies = [
  "async-trait",
  "colored",
