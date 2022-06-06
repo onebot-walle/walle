@@ -968,15 +968,16 @@ dependencies = [
  "time 0.3.9",
  "tokio",
  "tokio-cron-scheduler",
+ "tracing",
  "tracing-subscriber",
  "walle-core",
 ]
 
 [[package]]
 name = "walle-core"
-version = "0.4.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7111684df87f054ffbbba484bc6c7dbac8b2936e557216dcc5a59e8242dd81ca"
+checksum = "bd70a81dd1a61a5cf3cd671ac9fdd03044e956affcdb26e31b769ff92a92adae"
 dependencies = [
  "async-trait",
  "colored",
