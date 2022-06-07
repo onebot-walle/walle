@@ -3,7 +3,10 @@ use std::sync::Arc;
 use walle_core::action::BotActionExt;
 use walle_core::app::StandardArcBot;
 use walle_core::resp::SendMessageRespContent;
-use walle_core::{BaseEvent, EventContent, IntoMessage, Message, Resp, WalleResult};
+use walle_core::{
+    BaseEvent, EventContent, IntoMessage, Message, MetaContent, NoticeContent, RequestContent,
+    Resp, WalleResult,
+};
 
 use crate::MessageContent;
 
@@ -80,6 +83,11 @@ pub struct Session<C> {
     pub config: Arc<MatcherConfig>,
     temp_matchers: TempMatchers,
 }
+
+pub type MessageSession = Session<MessageContent>;
+pub type NoticeSession = Session<NoticeContent>;
+pub type RequestSession = Session<RequestContent>;
+pub type MetaSession = Session<MetaContent>;
 
 impl<C> Session<C> {
     pub fn new(

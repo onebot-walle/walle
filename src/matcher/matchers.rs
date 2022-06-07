@@ -12,6 +12,11 @@ use walle_core::{
 
 pub(crate) type TempMatchers = Arc<Mutex<HashMap<String, Matcher<EventContent>>>>;
 
+pub type MessageMatcher = Matcher<MessageContent>;
+pub type NoticeMatcher = Matcher<NoticeContent>;
+pub type RequestMatcher = Matcher<RequestContent>;
+pub type MetaMatcher = Matcher<MetaContent>;
+
 #[derive(Default)]
 pub struct Matchers {
     pub message: Vec<Matcher<MessageContent>>,
