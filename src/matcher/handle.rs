@@ -1,6 +1,7 @@
 use super::{LayeredPreHandler, LayeredRule, PreHandler, Rule, Session};
 use std::{future::Future, pin::Pin};
 
+/// Matcher Handler
 #[async_trait::async_trait]
 pub trait MatcherHandler<C>: Sync {
     fn _match(&self, _session: &Session<C>) -> bool {

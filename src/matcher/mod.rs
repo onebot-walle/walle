@@ -1,14 +1,13 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use walle_core::action::BotActionExt;
-use walle_core::app::StandardArcBot;
 use walle_core::resp::SendMessageRespContent;
 use walle_core::{
     BaseEvent, EventContent, IntoMessage, Message, MetaContent, NoticeContent, RequestContent,
     Resp, WalleResult,
 };
 
-use crate::MessageContent;
+use crate::{MessageContent, WalleBot};
 
 mod handle;
 mod hook;
@@ -22,8 +21,9 @@ pub use matchers::*;
 pub use pre_handle::*;
 pub use rule::*;
 
-use crate::MatcherConfig;
+use crate::MatchersConfig;
 
+/// 单个匹配执行的最小单位
 #[derive(Clone)]
 pub struct Matcher<C> {
     pub name: &'static str,
@@ -76,24 +76,29 @@ where
     }
 }
 
+/// Matcher 使用的 Session
 #[derive(Clone)]
 pub struct Session<C> {
-    pub bot: walle_core::app::StandardArcBot,
+    pub bot: WalleBot,
     pub event: walle_core::event::BaseEvent<C>,
-    pub config: Arc<MatcherConfig>,
+    pub config: Arc<MatchersConfig>,
     temp_matchers: TempMatchers,
 }
 
+/// EventContent 为 MessageEvent 的 Session
 pub type MessageSession = Session<MessageContent>;
+/// EventContent 为 NoticeEvent 的 Session
 pub type NoticeSession = Session<NoticeContent>;
+/// EventContent 为 RequestEvent 的 Session
 pub type RequestSession = Session<RequestContent>;
+/// EventContent 为 MetaEvent 的 Session
 pub type MetaSession = Session<MetaContent>;
 
 impl<C> Session<C> {
     pub fn new(
-        bot: StandardArcBot,
+        bot: WalleBot,
         event: BaseEvent<C>,
-        config: Arc<MatcherConfig>,
+        config: Arc<MatchersConfig>,
         temp_plugins: TempMatchers,
     ) -> Self {
         Self {
@@ -121,6 +126,7 @@ impl Session<EventContent> {
 }
 
 impl Session<MessageContent> {
+    /// 根据 Event 回复消息
     pub async fn send<T: IntoMessage>(
         &self,
         message: T,
@@ -136,6 +142,7 @@ impl Session<MessageContent> {
         }
     }
 
+    /// 根据 Event 回复消息并获取 Event
     pub async fn get<T: IntoMessage>(
         &mut self,
         message: T,
@@ -177,7 +184,7 @@ impl Session<MessageContent> {
     }
 }
 
-pub struct TempMatcher {
+pub(crate) struct TempMatcher {
     pub tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
 }
 
@@ -189,7 +196,7 @@ impl MatcherHandler<EventContent> for TempMatcher {
     }
 }
 
-pub fn temp_matcher(
+pub(crate) fn temp_matcher(
     user_id: String,
     group_id: Option<String>,
     tx: tokio::sync::mpsc::Sender<BaseEvent<MessageContent>>,
@@ -206,6 +213,7 @@ pub fn temp_matcher(
     )
 }
 
+/// Matcher 构造器
 pub struct MatcherBuilder<H> {
     pub name: &'static str,
     pub description: &'static str,

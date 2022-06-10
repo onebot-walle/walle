@@ -1,13 +1,13 @@
 use super::{Matcher, Session};
-use crate::{MatcherConfig, MatchersHook, MessageContent};
+use crate::ext::WalleAction;
+use crate::{MatchersConfig, MatchersHook, MessageContent, WalleBot};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use walle_core::app::StandardArcBot;
 use walle_core::{
     BaseEvent, EventContent, EventHandler, MetaContent, NoticeContent, RequestContent, Resps,
-    StandardAction, StandardEvent,
+    StandardEvent,
 };
 
 pub(crate) type TempMatchers = Arc<Mutex<HashMap<String, Matcher<EventContent>>>>;
@@ -23,13 +23,13 @@ pub struct Matchers {
     pub notice: Vec<Matcher<NoticeContent>>,
     pub request: Vec<Matcher<RequestContent>>,
     pub meta: Vec<Matcher<MetaContent>>,
-    pub config: Arc<MatcherConfig>,
+    pub config: Arc<MatchersConfig>,
     temp: TempMatchers,
     hooks: Vec<Box<dyn MatchersHook + Send + 'static>>,
 }
 
 impl Matchers {
-    pub fn new(config: MatcherConfig) -> Self {
+    pub fn new(config: MatchersConfig) -> Self {
         Self {
             config: Arc::new(config),
             ..Default::default()
@@ -53,7 +53,7 @@ impl Matchers {
     }
     async fn _event_call<C>(
         &self,
-        bot: &StandardArcBot,
+        bot: &WalleBot,
         event: StandardEvent,
         matchers: &Vec<Matcher<C>>,
     ) -> Option<StandardEvent>
@@ -86,8 +86,8 @@ impl Matchers {
 }
 
 #[async_trait]
-impl EventHandler<StandardEvent, StandardAction, Resps<StandardEvent>> for Matchers {
-    async fn handle(&self, bot: StandardArcBot, event: StandardEvent) {
+impl EventHandler<StandardEvent, WalleAction, Resps<StandardEvent>> for Matchers {
+    async fn handle(&self, bot: WalleBot, event: StandardEvent) {
         let session = Session::new(bot, event, self.config.clone(), self.temp.clone());
         if let Some(p) = {
             let mut temp_plugins = self.temp.lock().await;
