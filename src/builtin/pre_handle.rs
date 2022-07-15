@@ -1,4 +1,4 @@
-use walle_core::{MessageAlt, MessageEventDetail, MessageSegment};
+use walle_core::prelude::*;
 
 use crate::{pre_handle_fn, MessageContent, PreHandler, Session};
 

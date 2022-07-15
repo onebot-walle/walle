@@ -1,5 +1,5 @@
 use crate::{rule_fn, MessageContent, Rule, Session};
-use walle_core::{EventContent, MessageEventDetail, MessageSegment};
+use walle_core::prelude::*;
 
 pub struct UserIdChecker {
     pub user_id: String,

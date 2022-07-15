@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use tracing::info;
 use walle::{
     builtin::{echo2, strip_prefix},
@@ -20,7 +22,27 @@ async fn main() {
         .add_message_matcher(group_temp_plugin())
         .add_message_matcher(echo2().build())
         .add_message_matcher(voice_test_plugin());
-    let walle = new_walle(walle_core::config::AppConfig::default(), matchers);
+    let walle = new_walle(
+        walle_core::config::AppConfig {
+            // http: {
+            //     let mut map = HashMap::default();
+            //     map.insert(
+            //         "2431103771".to_string(),
+            //         walle_core::config::HttpClient::default(),
+            //     );
+            //     map
+            // },
+            // http_webhook: vec![walle_core::config::HttpServer {
+            //     host: std::net::IpAddr::from([127, 0, 0, 1]),
+            //     port: 6701,
+            //     ..Default::default()
+            // }],
+            // websocket: vec![walle_core::config::WebSocketClient::default()],
+            // websocket_rev: vec![],
+            ..Default::default()
+        },
+        matchers,
+    );
     walle.run_block().await.unwrap();
 }
 
@@ -35,7 +57,7 @@ fn recall_test_plugin() -> Matcher<MessageContent> {
                 s.bot.delete_message(m.data.message_id).await.unwrap();
             }
         })
-        .pre_handle(strip_prefix("./recall"), true),
+        .with_pre_handler(strip_prefix("./recall"), true),
     )
 }
 
@@ -71,7 +93,7 @@ fn reply_test_plugin() -> Matcher<MessageContent> {
             .await
             .unwrap();
         })
-        .pre_handle(strip_prefix("./reply"), true),
+        .with_pre_handler(strip_prefix("./reply"), true),
     )
 }
 
@@ -106,7 +128,7 @@ fn forward_test_plugin() -> MessageMatcher {
             .await
             .unwrap();
         })
-        .pre_handle(strip_prefix("./forward"), true),
+        .with_pre_handler(strip_prefix("./forward"), true),
     )
 }
 
@@ -167,7 +189,7 @@ fn forward_2077_plugin() -> MessageMatcher {
             .await
             .unwrap();
         })
-        .pre_handle(strip_prefix("2077dlc出了吗"), true),
+        .with_pre_handler(strip_prefix("2077dlc出了吗"), true),
     )
 }
 
@@ -176,19 +198,19 @@ fn url_image_plugin() -> MessageMatcher {
         "url_image",
         "url_image",
         handler_fn(|s| async move {
-            let file = tokio::fs::File::open("C:/Users/Administrator/Pictures/pump.jpg")
-                .await
-                .unwrap();
             let r = s
                 .bot
-                .upload_file_fragmented("pump.jpg".to_string(), file)
-                .await;
-            println!("{:?}", r);
-            s.send(MessageSegment::image(r.unwrap().data.file_id))
+                .upload_file_by_url(
+                    "test".to_string(),
+                    "https://avatars.githubusercontent.com/u/18395948?s=40&v=4".to_string(),
+                    HashMap::default(),
+                    None,
+                )
                 .await
                 .unwrap();
+            s.send(MessageSegment::image(r.data.file_id)).await.unwrap();
         })
-        .pre_handle(strip_prefix("./url_image"), true),
+        .with_pre_handler(strip_prefix("./url_image"), true),
     )
 }
 
@@ -208,7 +230,7 @@ fn delete_friend_plugin() -> MessageMatcher {
                 .await;
             println!("{r:?}");
         })
-        .pre_handle(strip_prefix("./delete_me"), true),
+        .with_pre_handler(strip_prefix("./delete_me"), true),
     )
 }
 
@@ -235,7 +257,7 @@ fn group_temp_plugin() -> MessageMatcher {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             s.bot.delete_message(r.unwrap().data.message_id).await.ok();
         })
-        .pre_handle(strip_prefix("./temp_me"), true),
+        .with_pre_handler(strip_prefix("./temp_me"), true),
     )
 }
 
@@ -261,6 +283,6 @@ fn voice_test_plugin() -> MessageMatcher {
                     .unwrap();
             }
         })
-        .pre_handle(strip_prefix("./voice"), true),
+        .with_pre_handler(strip_prefix("./voice"), true),
     )
 }

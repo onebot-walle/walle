@@ -1,18 +1,18 @@
-use crate::{MatcherHandler, Session};
+use crate::{MatcherHandler, Session, Signal};
 use std::future::Future;
 use std::pin::Pin;
 
-pub trait Rule<C> {
-    fn rule(&self, session: &Session<C>) -> bool;
-    fn _handle(&self, _session: &Session<C>) {}
+pub trait Rule<T = (), D = (), S = (), P = (), I = ()> {
+    fn rule(&self, session: &Session<T, D, S, P, I>) -> Signal;
     fn layer<H>(self, handler: H) -> LayeredRule<Self, H>
     where
         Self: Sized,
-        H: MatcherHandler<C>,
+        H: MatcherHandler<T, D, S, P, I>,
     {
         LayeredRule {
             rule: self,
             handler,
+            before: true,
         }
     }
 }
@@ -20,6 +20,7 @@ pub trait Rule<C> {
 pub struct LayeredRule<R, H> {
     pub rule: R,
     pub handler: H,
+    pub before: bool,
 }
 
 impl<R, H, C> MatcherHandler<C> for LayeredRule<R, H>
@@ -28,11 +29,12 @@ where
     H: MatcherHandler<C> + Sync,
     C: 'static,
 {
-    fn _match(&self, session: &Session<C>) -> bool {
-        self.rule.rule(session) && self.handler._match(session)
-    }
-    fn _pre_handle(&self, session: &mut Session<C>) -> bool {
-        self.handler._pre_handle(session)
+    fn pre_handle(&self, session: &mut Session<C>) -> Signal {
+        if self.before {
+            self.rule.rule(session) + self.handler.pre_handle(session)
+        } else {
+            self.handler.pre_handle(session) + self.rule.rule(session)
+        }
     }
     fn handle<'a, 't>(
         &'a self,
@@ -42,7 +44,6 @@ where
         'a: 't,
         Self: 't,
     {
-        self.rule._handle(&session);
         self.handler.handle(session)
     }
 }
@@ -51,16 +52,16 @@ pub struct RuleFn<I>(I);
 
 impl<I, C> Rule<C> for RuleFn<I>
 where
-    I: Fn(&Session<C>) -> bool,
+    I: Fn(&Session<C>) -> Signal,
 {
-    fn rule(&self, session: &Session<C>) -> bool {
+    fn rule(&self, session: &Session<C>) -> Signal {
         self.0(session)
     }
 }
 
 pub fn rule_fn<I, C>(rule: I) -> RuleFn<I>
 where
-    I: Fn(&Session<C>) -> bool,
+    I: Fn(&Session<C>) -> Signal,
 {
     RuleFn(rule)
 }
