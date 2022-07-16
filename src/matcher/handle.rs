@@ -4,12 +4,15 @@ use super::{LayeredPreHandler, LayeredRule, PreHandler, Rule, Session};
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
-use walle_core::{event::Event, util::ExtendedMap};
+use walle_core::{
+    event::{DetailTypeDeclare, Event, ImplDeclare, PlatformDeclare, SubTypeDeclare, TypeDeclare},
+    prelude::WalleError,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Signal {
     MatchAndBlock,
-    Match,
+    Matched,
     NotMatch,
 }
 
@@ -18,9 +21,9 @@ impl core::ops::Add for Signal {
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Self::MatchAndBlock, Self::MatchAndBlock)
-            | (Self::Match, Self::MatchAndBlock)
-            | (Self::MatchAndBlock, Self::Match) => Self::MatchAndBlock,
-            (Self::Match, Self::Match) => Self::Match,
+            | (Self::Matched, Self::MatchAndBlock)
+            | (Self::MatchAndBlock, Self::Matched) => Self::MatchAndBlock,
+            (Self::Matched, Self::Matched) => Self::Matched,
             (_, _) => Self::NotMatch,
         }
     }
@@ -44,7 +47,11 @@ pub(crate) struct BoxedHandler<H, T, D, S, P, I>(
 impl<H, T, D, S, P, I> _MatcherHandler for BoxedHandler<H, T, D, S, P, I>
 where
     H: MatcherHandler<T, D, S, P, I> + Send + 'static,
-    T: TryFrom<ExtendedMap, Error = ()> + Send + 'static,
+    T: for<'a> TryFrom<&'a mut Event, Error = WalleError> + TypeDeclare + Send + 'static,
+    D: for<'a> TryFrom<&'a mut Event, Error = WalleError> + DetailTypeDeclare + Send + 'static,
+    S: for<'a> TryFrom<&'a mut Event, Error = WalleError> + SubTypeDeclare + Send + 'static,
+    I: for<'a> TryFrom<&'a mut Event, Error = WalleError> + ImplDeclare + Send + 'static,
+    P: for<'a> TryFrom<&'a mut Event, Error = WalleError> + PlatformDeclare + Send + 'static,
 {
     fn call(
         &self,
@@ -54,7 +61,7 @@ where
         temp: &TempMatchers,
     ) -> Signal {
         if let Ok(event) = event.try_into() {
-            let session =
+            let mut session =
                 Session::<T, D, S, P, I>::new(event, caller.clone(), config.clone(), temp.clone());
             let signal = self.0.pre_handle(&mut session);
             let handler = self.0.clone();
@@ -74,7 +81,7 @@ where
 #[async_trait]
 pub trait MatcherHandler<T = (), D = (), S = (), P = (), I = ()>: Sync {
     fn pre_handle(&self, _session: &mut Session<T, D, S, P, I>) -> Signal {
-        Signal::Match
+        Signal::Matched
     }
     async fn handle(&self, session: Session<T, D, S, P, I>);
 }
@@ -114,9 +121,15 @@ pub trait MatcherHandlerExt<T = (), D = (), S = (), P = (), I = ()>:
             handler: self,
         }
     }
+    fn boxed(self) -> BoxedHandler<Self, T, D, S, P, I>
+    where
+        Self: Sized,
+    {
+        BoxedHandler(Arc::new(self), std::marker::PhantomData::default())
+    }
 }
 
-impl<C, H: MatcherHandler<C>> MatcherHandlerExt<C> for H {}
+impl<T, D, S, P, I, H: MatcherHandler<T, D, S, P, I>> MatcherHandlerExt<T, D, S, P, I> for H {}
 
 pub struct HandlerFn<I>(I);
 

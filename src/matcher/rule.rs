@@ -15,6 +15,13 @@ pub trait Rule<T = (), D = (), S = (), P = (), I = ()> {
             before: true,
         }
     }
+    fn with<R>(self, rule: R) -> JoinedRule<Self, R>
+    where
+        Self: Sized,
+        R: Rule<T, D, S, P, I>,
+    {
+        JoinedRule(self, rule)
+    }
 }
 
 pub struct LayeredRule<R, H> {
@@ -23,13 +30,12 @@ pub struct LayeredRule<R, H> {
     pub before: bool,
 }
 
-impl<R, H, C> MatcherHandler<C> for LayeredRule<R, H>
+impl<R, H, T, D, S, P, I> MatcherHandler<T, D, S, P, I> for LayeredRule<R, H>
 where
-    R: Rule<C> + Sync,
-    H: MatcherHandler<C> + Sync,
-    C: 'static,
+    R: Rule<T, D, S, P, I> + Sync,
+    H: MatcherHandler<T, D, S, P, I> + Sync,
 {
-    fn pre_handle(&self, session: &mut Session<C>) -> Signal {
+    fn pre_handle(&self, session: &mut Session<T, D, S, P, I>) -> Signal {
         if self.before {
             self.rule.rule(session) + self.handler.pre_handle(session)
         } else {
@@ -38,7 +44,7 @@ where
     }
     fn handle<'a, 't>(
         &'a self,
-        session: Session<C>,
+        session: Session<T, D, S, P, I>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 't>>
     where
         'a: 't,
@@ -48,20 +54,32 @@ where
     }
 }
 
-pub struct RuleFn<I>(I);
+pub struct JoinedRule<R0, R1>(pub R0, pub R1);
 
-impl<I, C> Rule<C> for RuleFn<I>
+impl<R0, R1, T, D, S, P, I> Rule<T, D, S, P, I> for JoinedRule<R0, R1>
 where
-    I: Fn(&Session<C>) -> Signal,
+    R0: Rule<T, D, S, P, I> + Sync,
+    R1: Rule<T, D, S, P, I> + Sync,
 {
-    fn rule(&self, session: &Session<C>) -> Signal {
+    fn rule(&self, session: &Session<T, D, S, P, I>) -> Signal {
+        self.0.rule(session) + self.1.rule(session)
+    }
+}
+
+pub struct RuleFn<F>(F);
+
+impl<F, T, D, S, P, I> Rule<T, D, S, P, I> for RuleFn<F>
+where
+    F: Fn(&Session<T, D, S, P, I>) -> Signal,
+{
+    fn rule(&self, session: &Session<T, D, S, P, I>) -> Signal {
         self.0(session)
     }
 }
 
-pub fn rule_fn<I, C>(rule: I) -> RuleFn<I>
+pub fn rule_fn<F, T, D, S, P, I>(rule: F) -> RuleFn<F>
 where
-    I: Fn(&Session<C>) -> Signal,
+    F: Fn(&Session<T, D, S, P, I>) -> Signal,
 {
     RuleFn(rule)
 }

@@ -1,22 +1,17 @@
-use crate::{rule_fn, MessageContent, Rule, Session};
-use walle_core::prelude::*;
+use crate::Signal;
+use crate::{rule_fn, Rule, Session};
+use walle_core::event::{DetailTypeDeclare, Group, Message};
 
 pub struct UserIdChecker {
     pub user_id: String,
 }
 
-impl Rule<MessageContent> for UserIdChecker {
-    fn rule(&self, session: &Session<MessageContent>) -> bool {
-        session.event.user_id() == self.user_id
-    }
-}
-
-impl Rule<EventContent> for UserIdChecker {
-    fn rule(&self, session: &Session<EventContent>) -> bool {
-        if let EventContent::Message(ref c) = session.event.content {
-            c.user_id == self.user_id
+impl<D, S, P, I> Rule<Message, D, S, P, I> for UserIdChecker {
+    fn rule(&self, session: &Session<Message, D, S, P, I>) -> Signal {
+        if session.event.ty.user_id == self.user_id {
+            Signal::Matched
         } else {
-            false
+            Signal::NotMatch
         }
     }
 }
@@ -34,20 +29,13 @@ pub struct GroupIdChecker {
     pub group_id: String,
 }
 
-impl Rule<MessageContent> for GroupIdChecker {
-    fn rule(&self, session: &Session<MessageContent>) -> bool {
-        session.event.group_id() == Some(&self.group_id)
-    }
-}
-
-impl Rule<EventContent> for GroupIdChecker {
-    fn rule(&self, session: &Session<EventContent>) -> bool {
-        if let EventContent::Message(ref c) = session.event.content {
-            if c.detail.group_id() == Some(&self.group_id) {
-                return true;
-            }
+impl<S, P, I> Rule<Message, Group, S, P, I> for GroupIdChecker {
+    fn rule(&self, session: &Session<Message, Group, S, P, I>) -> Signal {
+        if session.event.detail_type.group_id == self.group_id {
+            Signal::Matched
+        } else {
+            Signal::NotMatch
         }
-        false
     }
 }
 
@@ -60,41 +48,43 @@ where
     }
 }
 
-pub fn start_with(pat: &str) -> impl Rule<MessageContent> {
+pub fn start_with<D, S, P, I>(pat: &str) -> impl Rule<Message, D, S, P, I> {
     let word = pat.to_string();
-    rule_fn(move |session: &Session<MessageContent>| -> bool {
-        session.event.content.alt_message.starts_with(&word)
+    rule_fn(move |session: &Session<Message, D, S, P, I>| -> Signal {
+        if session.event.ty.alt_message.starts_with(&word) {
+            Signal::Matched
+        } else {
+            Signal::NotMatch
+        }
     })
 }
 
-fn _mention_me(session: &Session<MessageContent>) -> bool {
-    if let Some(MessageSegment::Text { text, .. }) = session.message().first() {
-        for nickname in &session.config.nicknames {
-            if text.starts_with(nickname) {
-                return true;
-            }
+fn _mention_me<D, S, P, I>(session: &Session<Message, D, S, P, I>) -> Signal {
+    use walle_core::segment::{Mention, MessageExt};
+    let alt = &session.event.ty.alt_message;
+    for nickname in &session.config.nicknames {
+        if alt.starts_with(nickname) {
+            return Signal::Matched;
         }
     }
-    for seg in session.event.content.message.iter() {
-        if let MessageSegment::Mention { user_id, .. } = seg {
-            if user_id == &session.bot.self_id {
-                return true;
-            }
+    for mention in session.event.ty.message.clone().extract::<Mention>() {
+        if mention.user_id == session.event.self_id {
+            return Signal::Matched;
         }
     }
-    false
+    Signal::NotMatch
 }
 
-pub fn mention_me() -> impl Rule<MessageContent> {
+pub fn mention_me_rule<D, S, P, I>() -> impl Rule<Message, D, S, P, I> {
     rule_fn(_mention_me)
 }
 
-pub fn to_me() -> impl Rule<MessageContent> {
-    rule_fn(|session: &Session<MessageContent>| {
-        if let MessageEventDetail::Group { .. } = session.event.content.detail {
-            _mention_me(session)
+pub fn to_me_rule<D: DetailTypeDeclare, S, P, I>() -> impl Rule<Message, D, S, P, I> {
+    rule_fn(|session: &Session<Message, D, S, P, I>| {
+        if D::detail_type() == "private" {
+            Signal::Matched
         } else {
-            true
+            _mention_me(session)
         }
     })
 }

@@ -15,6 +15,8 @@ pub use matcher::*;
 // #[cfg(feature = "scheduler")]
 // pub use scheduler::*;
 
+pub mod builtin;
+
 /// 构造一个新的 Walle 实例
 pub fn new_walle(matchers: Matchers) -> Arc<OneBot<AppOBC<Action, Resp>, Matchers, 12>> {
     let timer = tracing_subscriber::fmt::time::OffsetTime::new(

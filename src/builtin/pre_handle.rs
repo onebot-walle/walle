@@ -1,25 +1,40 @@
-use walle_core::prelude::*;
+use crate::{pre_handle_fn, PreHandler, Session, Signal};
+use walle_core::{
+    event::{BaseEvent, Message},
+    prelude::MessageSegment,
+    util::Value,
+};
 
-use crate::{pre_handle_fn, MessageContent, PreHandler, Session};
+fn text_mut(seg: &mut MessageSegment) -> Option<&mut String> {
+    if seg.ty.as_str() == "text" {
+        seg.data.get_mut("text").and_then(|v| v.as_str_mut())
+    } else {
+        None
+    }
+}
 
-fn update_alt(session: &mut Session<MessageContent>) -> bool {
-    *session.alt_message_mut() = session.message().alt();
-    return true;
+fn first_text_mut<D, S, P, I>(event: &mut BaseEvent<Message, D, S, P, I>) -> Option<&mut String> {
+    event.ty.message.first_mut().and_then(text_mut)
+}
+
+fn last_text_mut<D, S, P, I>(event: &mut BaseEvent<Message, D, S, P, I>) -> Option<&mut String> {
+    event.ty.message.last_mut().and_then(text_mut)
 }
 
 pub struct StripPrefix {
     pub prefix: String,
 }
 
-impl PreHandler<MessageContent> for StripPrefix {
-    fn pre_handle(&self, session: &mut Session<MessageContent>) -> bool {
-        if let Some(MessageSegment::Text { text, .. }) = session.message_mut().first_mut() {
+impl<D, S, P, I> PreHandler<Message, D, S, P, I> for StripPrefix {
+    fn pre_handle(&self, session: &mut Session<Message, D, S, P, I>) -> Signal {
+        if let Some(text) = first_text_mut(&mut session.event) {
             if let Some(s) = text.strip_prefix(&self.prefix) {
                 *text = s.to_string();
-                return update_alt(session);
+                session.update_alt();
+                return Signal::Matched;
             }
         }
-        false
+        Signal::NotMatch
     }
 }
 
@@ -32,78 +47,58 @@ where
     }
 }
 
-pub fn strip_whitespace() -> impl PreHandler<MessageContent> {
+pub fn strip_whitespace<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
     pre_handle_fn(|session| {
-        if let Some(MessageSegment::Text { text, .. }) = session.message_mut().first_mut() {
-            let mut str: &str = text;
-            while let Some(s) = str.strip_prefix(' ') {
-                str = s;
+        let mut sig = Signal::NotMatch;
+        if let Some(text) = first_text_mut(&mut session.event) {
+            while let Some(s) = text.strip_prefix(' ') {
+                *text = s.to_string();
+                sig = Signal::Matched;
             }
-            *text = str.to_string();
-            return update_alt(session);
         }
-        if let Some(MessageSegment::Text { text, .. }) = session.message_mut().last_mut() {
-            let mut str: &str = text;
-            while let Some(s) = str.strip_suffix(' ') {
-                str = s;
+        if let Some(text) = last_text_mut(&mut session.event) {
+            while let Some(s) = text.strip_suffix(' ') {
+                *text = s.to_string();
+                sig = Signal::Matched;
             }
-            *text = str.to_string();
-            return update_alt(session);
         }
-        false
+        if sig != Signal::NotMatch {
+            session.update_alt();
+        }
+        sig
     })
 }
 
-fn _remove_mention_me(session: &mut Session<MessageContent>) -> bool {
-    for i in 0..session.message().len() {
-        if let MessageSegment::Mention { ref user_id, .. } = session.message()[i] {
-            if user_id == &session.event.self_id {
-                session.message_mut().remove(i);
-                return update_alt(session);
+fn _mention_me<D, S, P, I>(session: &mut Session<Message, D, S, P, I>) -> Signal {
+    let segments = &mut session.event.ty.message;
+    let self_id = Value::Str(session.event.self_id.clone());
+    for i in 0..segments.len() {
+        let seg = segments.get(i).unwrap();
+        if seg.ty.as_str() == "mention" {
+            if seg.data.get("user_id") == Some(&self_id) {
+                session.update_alt();
+                return Signal::Matched;
             }
         }
     }
-    false
+    Signal::NotMatch
 }
 
-pub fn remove_mention_me() -> impl PreHandler<MessageContent> {
-    pre_handle_fn(_remove_mention_me)
+pub fn mention_me<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
+    pre_handle_fn(_mention_me)
 }
 
-fn _remove_nickname(session: &mut Session<MessageContent>) -> bool {
-    let mut s = String::default();
-    if let Some(MessageSegment::Text { text, .. }) = session.message().first() {
-        for nickname in &session.config.nicknames {
-            if let Some(striped) = text.strip_prefix(nickname) {
-                s.push_str(striped);
+pub fn to_me<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
+    pre_handle_fn(|session| {
+        if let Some(text) = first_text_mut(&mut session.event) {
+            for nickname in &session.config.nicknames {
+                if let Some(s) = text.strip_prefix(nickname) {
+                    *text = s.to_string();
+                    session.update_alt();
+                    return Signal::Matched;
+                }
             }
         }
-    }
-    match s.as_str() {
-        "" => {
-            session.message_mut().remove(0);
-            return update_alt(session);
-        }
-        _ => {
-            if let Some(MessageSegment::Text { text, .. }) = session.message_mut().first_mut() {
-                *text = s;
-                return update_alt(session);
-            }
-        }
-    }
-    false
-}
-
-pub fn remove_nickname() -> impl PreHandler<MessageContent> {
-    pre_handle_fn(_remove_nickname)
-}
-
-pub fn remove_to_me() -> impl PreHandler<MessageContent> {
-    pre_handle_fn(|session: &mut Session<MessageContent>| {
-        if let MessageEventDetail::Private { .. } = session.event.content.detail {
-            return true;
-        } else {
-            return _remove_nickname(session) || _remove_mention_me(session);
-        }
+        _mention_me(session)
     })
 }

@@ -15,21 +15,27 @@ pub trait PreHandler<T = (), D = (), S = (), P = (), I = ()> {
             before: true,
         }
     }
+    fn with<PR>(self, pr: PR) -> JoinedPreHandler<Self, PR>
+    where
+        Self: Sized,
+        PR: PreHandler<T, D, S, P, I>,
+    {
+        JoinedPreHandler(self, pr)
+    }
 }
 
-pub struct LayeredPreHandler<P, H> {
-    pub pre: P,
+pub struct LayeredPreHandler<PR, H> {
+    pub pre: PR,
     pub handler: H,
     pub before: bool,
 }
 
-impl<P, H, C> MatcherHandler<C> for LayeredPreHandler<P, H>
+impl<PR, H, T, D, S, P, I> MatcherHandler<T, D, S, P, I> for LayeredPreHandler<PR, H>
 where
-    P: PreHandler<C> + Sync,
-    H: MatcherHandler<C> + Sync,
-    C: 'static,
+    PR: PreHandler<T, D, S, P, I> + Sync,
+    H: MatcherHandler<T, D, S, P, I> + Sync,
 {
-    fn pre_handle(&self, session: &mut Session<C>) -> Signal {
+    fn pre_handle(&self, session: &mut Session<T, D, S, P, I>) -> Signal {
         if self.before {
             self.pre.pre_handle(session) + self.handler.pre_handle(session)
         } else {
@@ -38,7 +44,7 @@ where
     }
     fn handle<'a, 't>(
         &'a self,
-        session: Session<C>,
+        session: Session<T, D, S, P, I>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 't>>
     where
         'a: 't,
@@ -48,20 +54,32 @@ where
     }
 }
 
-pub struct PreHandleFn<I>(I);
+pub struct JoinedPreHandler<PR0, PR1>(pub PR0, pub PR1);
 
-impl<I, C> PreHandler<C> for PreHandleFn<I>
+impl<PR0, PR1, T, D, S, P, I> PreHandler<T, D, S, P, I> for JoinedPreHandler<PR0, PR1>
 where
-    I: Fn(&mut Session<C>) -> Signal + Sync,
+    PR0: PreHandler<T, D, S, P, I> + Sync,
+    PR1: PreHandler<T, D, S, P, I> + Sync,
 {
-    fn pre_handle(&self, session: &mut Session<C>) -> Signal {
+    fn pre_handle(&self, session: &mut Session<T, D, S, P, I>) -> Signal {
+        self.0.pre_handle(session) + self.1.pre_handle(session)
+    }
+}
+
+pub struct PreHandleFn<F>(F);
+
+impl<F, T, D, S, P, I> PreHandler<T, D, S, P, I> for PreHandleFn<F>
+where
+    F: Fn(&mut Session<T, D, S, P, I>) -> Signal + Sync,
+{
+    fn pre_handle(&self, session: &mut Session<T, D, S, P, I>) -> Signal {
         self.0(session)
     }
 }
 
-pub fn pre_handle_fn<I, C>(pre: I) -> PreHandleFn<I>
+pub fn pre_handle_fn<F, T, D, S, P, I>(pre: F) -> PreHandleFn<F>
 where
-    I: Fn(&mut Session<C>) -> Signal + Sync,
+    F: Fn(&mut Session<T, D, S, P, I>) -> Signal + Sync,
 {
     PreHandleFn(pre)
 }

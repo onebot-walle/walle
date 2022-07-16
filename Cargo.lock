@@ -1051,9 +1051,9 @@ checksum = "099b7128301d285f79ddd55b9a83d5e6b9e97c92e0ea0daebee7263e932de992"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bd2fe26506023ed7b5e1e315add59d6f584c621d037f9368fea9cfb988f368c"
+checksum = "15c61ba63f9235225a22310255a29b806b907c9b8c964bcbd0a2c70f3f2deea7"
 
 [[package]]
 name = "unicode-normalization"
@@ -1121,7 +1121,7 @@ dependencies = [
 [[package]]
 name = "walle-core"
 version = "0.6.0-a1"
-source = "git+https://github.com/abrahum/walle-core.git#d7ee9b30dc8a83aaefc163e1bffd6913e5b450fe"
+source = "git+https://github.com/abrahum/walle-core.git#bd0074677c7d9dce0e6e1d495944f4698a420b2a"
 dependencies = [
  "async-trait",
  "base64",
@@ -1145,7 +1145,7 @@ dependencies = [
 [[package]]
 name = "walle-macro"
 version = "0.1.0"
-source = "git+https://github.com/abrahum/walle-core.git#d7ee9b30dc8a83aaefc163e1bffd6913e5b450fe"
+source = "git+https://github.com/abrahum/walle-core.git#bd0074677c7d9dce0e6e1d495944f4698a420b2a"
 dependencies = [
  "proc-macro2",
  "quote",

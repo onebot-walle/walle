@@ -1,7 +1,10 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
-use walle_core::prelude::*;
+use std::{future::Future, pin::Pin, sync::Arc};
+use walle_core::{
+    action::SendMessage,
+    event::{Group, Message, MessageDeatilTypes, Private},
+    prelude::*,
+    structs::SendMessageResp,
+};
 
 use crate::MatchersConfig;
 use walle_core::{
@@ -50,26 +53,198 @@ impl<T, D, S, P, I> Session<T, D, S, P, I> {
         action
             .params
             .insert("self_id".to_string(), self.event.self_id.as_str().into());
-        self.caller.clone().call(action).await
+        self.caller.call(action).await
     }
 }
 
-pub trait ActionCaller: Sync {
-    fn call(
-        self: Arc<Self>,
-        action: Action,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<Resp>> + Send + 'static>>;
+impl<D, S, P, I> Session<Message, D, S, P, I> {
+    pub fn message(&self) -> &Segments {
+        &self.event.ty.message
+    }
+    pub fn message_mut(&mut self) -> &mut Segments {
+        &mut self.event.ty.message
+    }
+    pub fn update_alt(&mut self) {
+        self.event.ty.alt_message = self.message().iter().map(|seg| seg.alt()).collect();
+    }
 }
 
+impl<S, P, I> Session<Message, Private, S, P, I> {
+    pub async fn send(&self, message: Segments) -> WalleResult<SendMessageResp> {
+        self.call(
+            SendMessage {
+                detail_type: "private".to_string(),
+                user_id: Some(self.event.ty.user_id.clone()),
+                group_id: None,
+                channel_id: None,
+                guild_id: None,
+                message,
+            }
+            .into(),
+        )
+        .await?
+        .as_result()?
+        .try_into()
+    }
+}
+
+impl<S, P, I> Session<Message, Group, S, P, I> {
+    pub async fn send(&self, message: Segments) -> WalleResult<SendMessageResp> {
+        self.call(
+            SendMessage {
+                detail_type: "group".to_string(),
+                user_id: Some(self.event.ty.user_id.clone()),
+                group_id: Some(self.event.detail_type.group_id.clone()),
+                channel_id: None,
+                guild_id: None,
+                message,
+            }
+            .into(),
+        )
+        .await?
+        .as_result()?
+        .try_into()
+    }
+}
+
+impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
+    pub async fn send(&self, message: Segments) -> WalleResult<SendMessageResp> {
+        let group_id = match &self.event.detail_type {
+            MessageDeatilTypes::Group(group) => Some(group.group_id.clone()),
+            _ => None,
+        };
+        self.call(
+            SendMessage {
+                detail_type: if group_id.is_some() {
+                    "group".to_string()
+                } else {
+                    "private".to_string()
+                },
+                user_id: Some(self.event.ty.user_id.clone()),
+                group_id,
+                channel_id: None,
+                guild_id: None,
+                message,
+            }
+            .into(),
+        )
+        .await?
+        .as_result()?
+        .try_into()
+    }
+
+    pub async fn get<M>(&mut self, message: M, duration: std::time::Duration) -> WalleResult<()>
+    where
+        M: IntoMessage,
+        S: Send + 'static,
+        P: Send + 'static,
+        I: Send + 'static,
+    {
+        use crate::builtin::{group_id_check, user_id_check};
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let temp = TempMatcher { tx }.with_rule(user_id_check(&self.event.ty.user_id));
+        if let MessageDeatilTypes::Group(group) = &self.event.detail_type {
+            self.temps.insert(
+                self.event.id.clone(),
+                Box::new(temp.with_rule(group_id_check(&group.group_id)).boxed()),
+            );
+        } else {
+            self.temps
+                .insert(self.event.id.clone(), Box::new(temp.boxed()));
+        }
+        self.send(message.into_message()).await?;
+        // todo: timeout
+        if let Some(event) = rx.recv().await {
+            self.event = event;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct Bot {
+    pub self_id: String,
+    pub caller: Arc<dyn ActionCaller + Send + 'static>,
+}
+
+impl Bot {
+    pub async fn call(&self, mut action: Action) -> WalleResult<Resp> {
+        action
+            .params
+            .insert("self_id".to_string(), self.self_id.as_str().into());
+        self.caller.call(action).await
+    }
+}
+
+#[async_trait]
+pub trait ActionCaller: Sync {
+    async fn call(&self, action: Action) -> WalleResult<Resp>;
+    async fn get_bots(self: Arc<Self>) -> Vec<Bot>;
+}
+
+#[async_trait]
 impl<AH, EH> ActionCaller for OneBot<AH, EH, 12>
 where
     AH: ActionHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
     EH: EventHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
 {
-    fn call(
-        self: Arc<Self>,
+    fn call<'a, 't>(
+        &'a self,
         action: Action,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<Resp>> + Send + 'static>> {
-        Box::pin(async move { self.action_handler.call(action, &self).await })
+    ) -> Pin<Box<dyn Future<Output = WalleResult<Resp>> + Send + 't>>
+    where
+        'a: 't,
+        Self: 't,
+    {
+        self.action_handler.call(action)
+    }
+
+    async fn get_bots(self: Arc<Self>) -> Vec<Bot> {
+        self.action_handler
+            .self_ids()
+            .await
+            .into_iter()
+            .map(|id| Bot {
+                self_id: id,
+                caller: self.clone(),
+            })
+            .collect()
+    }
+}
+
+impl ActionCaller for Bot {
+    fn call<'a, 't>(
+        &'a self,
+        action: Action,
+    ) -> Pin<Box<dyn Future<Output = WalleResult<Resp>> + Send + 't>>
+    where
+        'a: 't,
+        Self: 't,
+    {
+        self.caller.call(action)
+    }
+    fn get_bots<'t>(self: Arc<Self>) -> Pin<Box<dyn Future<Output = Vec<Bot>> + Send + 't>>
+    where
+        Self: 't,
+    {
+        self.caller.clone().get_bots()
+    }
+}
+
+struct TempMatcher<T, D, S, P, I> {
+    pub tx: tokio::sync::mpsc::UnboundedSender<BaseEvent<T, D, S, P, I>>,
+}
+
+#[async_trait]
+impl<T, D, S, P, I> MatcherHandler<T, D, S, P, I> for TempMatcher<T, D, S, P, I>
+where
+    T: Send + 'static,
+    D: Send + 'static,
+    S: Send + 'static,
+    P: Send + 'static,
+    I: Send + 'static,
+{
+    async fn handle(&self, session: Session<T, D, S, P, I>) {
+        self.tx.send(session.event).ok();
     }
 }
