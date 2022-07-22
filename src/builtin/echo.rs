@@ -10,6 +10,7 @@ pub struct Echo;
 #[async_trait]
 impl MatcherHandler<Message, MessageDeatilTypes> for Echo {
     async fn handle(&self, session: Session<Message, MessageDeatilTypes>) {
+        println!("{:?}", session.event);
         let _ = session.send(session.message().clone()).await;
     }
 }

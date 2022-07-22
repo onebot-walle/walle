@@ -1,4 +1,4 @@
-use crate::{ActionCaller, MatchersConfig, TempMatchers};
+use crate::{ActionCaller, Matcher, MatchersConfig, TempMatchers};
 
 use super::{LayeredPreHandler, LayeredRule, PreHandler, Rule, Session};
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -20,11 +20,9 @@ impl core::ops::Add for Signal {
     type Output = Self;
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (Self::MatchAndBlock, Self::MatchAndBlock)
-            | (Self::Matched, Self::MatchAndBlock)
-            | (Self::MatchAndBlock, Self::Matched) => Self::MatchAndBlock,
-            (Self::Matched, Self::Matched) => Self::Matched,
-            (_, _) => Self::NotMatch,
+            (_, Self::MatchAndBlock) | (Self::MatchAndBlock, _) => Self::MatchAndBlock,
+            (_, Self::Matched) | (Self::Matched, _) => Self::Matched,
+            _ => Self::NotMatch,
         }
     }
 }
@@ -47,11 +45,31 @@ pub(crate) struct BoxedHandler<H, T, D, S, P, I>(
 impl<H, T, D, S, P, I> _MatcherHandler for BoxedHandler<H, T, D, S, P, I>
 where
     H: MatcherHandler<T, D, S, P, I> + Send + 'static,
-    T: for<'a> TryFrom<&'a mut Event, Error = WalleError> + TypeDeclare + Send + 'static,
-    D: for<'a> TryFrom<&'a mut Event, Error = WalleError> + DetailTypeDeclare + Send + 'static,
-    S: for<'a> TryFrom<&'a mut Event, Error = WalleError> + SubTypeDeclare + Send + 'static,
-    I: for<'a> TryFrom<&'a mut Event, Error = WalleError> + ImplDeclare + Send + 'static,
-    P: for<'a> TryFrom<&'a mut Event, Error = WalleError> + PlatformDeclare + Send + 'static,
+    T: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + TypeDeclare
+        + Send
+        + 'static,
+    D: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + DetailTypeDeclare
+        + Send
+        + 'static,
+    S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + SubTypeDeclare
+        + Send
+        + 'static,
+    I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + ImplDeclare
+        + Send
+        + 'static,
+    P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + PlatformDeclare
+        + Send
+        + 'static,
 {
     fn call(
         &self,
@@ -60,19 +78,25 @@ where
         caller: &Arc<dyn ActionCaller + Send + 'static>,
         temp: &TempMatchers,
     ) -> Signal {
-        if let Ok(event) = event.try_into() {
-            let mut session =
-                Session::<T, D, S, P, I>::new(event, caller.clone(), config.clone(), temp.clone());
-            let signal = self.0.pre_handle(&mut session);
-            let handler = self.0.clone();
-            if signal != Signal::NotMatch {
-                tokio::spawn(async move {
-                    handler.handle(session).await;
-                });
+        match event.try_into() {
+            Ok(event) => {
+                let mut session = Session::<T, D, S, P, I>::new(
+                    event,
+                    caller.clone(),
+                    config.clone(),
+                    temp.clone(),
+                );
+                let signal = self.0.pre_handle(&mut session);
+                println!("{}:{:?}", session.event.detail_type.detail_type(), signal);
+                let handler = self.0.clone();
+                if signal != Signal::NotMatch {
+                    tokio::spawn(async move {
+                        handler.handle(session).await;
+                    });
+                }
+                signal
             }
-            signal
-        } else {
-            Signal::NotMatch
+            Err(_) => Signal::NotMatch,
         }
     }
 }
@@ -121,36 +145,77 @@ pub trait MatcherHandlerExt<T = (), D = (), S = (), P = (), I = ()>:
             handler: self,
         }
     }
-    fn boxed(self) -> BoxedHandler<Self, T, D, S, P, I>
+    fn boxed(self) -> Matcher
     where
-        Self: Sized,
+        Self: Send + Sync + Sized + 'static,
+        T: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + TypeDeclare
+            + Send
+            + Sync
+            + 'static,
+        D: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + DetailTypeDeclare
+            + Send
+            + Sync
+            + 'static,
+        S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + SubTypeDeclare
+            + Send
+            + Sync
+            + 'static,
+        P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + PlatformDeclare
+            + Send
+            + Sync
+            + 'static,
+        I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + ImplDeclare
+            + Send
+            + Sync
+            + 'static,
     {
-        BoxedHandler(Arc::new(self), std::marker::PhantomData::default())
+        Box::new(BoxedHandler(
+            Arc::new(self),
+            std::marker::PhantomData::default(),
+        ))
     }
 }
 
 impl<T, D, S, P, I, H: MatcherHandler<T, D, S, P, I>> MatcherHandlerExt<T, D, S, P, I> for H {}
 
-pub struct HandlerFn<I>(I);
+pub struct HandlerFn<H>(H);
 
-pub fn handler_fn<I, C, Fut>(inner: I) -> HandlerFn<I>
+pub fn handler_fn<H, T, D, S, P, I, Fut>(inner: H) -> HandlerFn<H>
 where
-    I: Fn(Session<C>) -> Fut + Send + Sync,
+    H: Fn(Session<T, D, S, P, I>) -> Fut + Send + Sync,
     Fut: Future<Output = ()> + Send,
-    C: Sync + Send + 'static,
+    T: Sync + Send + 'static,
+    D: Sync + Send + 'static,
+    S: Sync + Send + 'static,
+    P: Sync + Send + 'static,
+    I: Sync + Send + 'static,
 {
     HandlerFn(inner)
 }
 
-impl<C, I, Fut> MatcherHandler<C> for HandlerFn<I>
+impl<T, D, S, P, I, H, Fut> MatcherHandler<T, D, S, P, I> for HandlerFn<H>
 where
-    C: Sync + Send + 'static,
-    I: Fn(Session<C>) -> Fut + Send + Sync + 'static,
+    H: Fn(Session<T, D, S, P, I>) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = ()> + Send + 'static,
+    T: Sync + Send + 'static,
+    D: Sync + Send + 'static,
+    S: Sync + Send + 'static,
+    P: Sync + Send + 'static,
+    I: Sync + Send + 'static,
 {
     fn handle<'a, 'b>(
         &'a self,
-        session: Session<C>,
+        session: Session<T, D, S, P, I>,
     ) -> Pin<Box<dyn Future<Output = ()> + Send + 'b>>
     where
         'a: 'b,

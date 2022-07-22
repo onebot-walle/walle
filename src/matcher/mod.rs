@@ -1,7 +1,9 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 use walle_core::{
     action::SendMessage,
-    event::{Group, Message, MessageDeatilTypes, Private},
+    event::{
+        Group, ImplDeclare, Message, MessageDeatilTypes, PlatformDeclare, Private, SubTypeDeclare,
+    },
     prelude::*,
     structs::SendMessageResp,
 };
@@ -11,6 +13,7 @@ use walle_core::{
     action::Action,
     event::{BaseEvent, Event},
     resp::Resp,
+    segment::IntoMessage,
 };
 
 mod handle;
@@ -108,7 +111,7 @@ impl<S, P, I> Session<Message, Group, S, P, I> {
 }
 
 impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
-    pub async fn send(&self, message: Segments) -> WalleResult<SendMessageResp> {
+    pub async fn send<M: IntoMessage>(&self, message: M) -> WalleResult<SendMessageResp> {
         let group_id = match &self.event.detail_type {
             MessageDeatilTypes::Group(group) => Some(group.group_id.clone()),
             _ => None,
@@ -124,7 +127,7 @@ impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
                 group_id,
                 channel_id: None,
                 guild_id: None,
-                message,
+                message: message.into_message(),
             }
             .into(),
         )
@@ -136,9 +139,24 @@ impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
     pub async fn get<M>(&mut self, message: M, duration: std::time::Duration) -> WalleResult<()>
     where
         M: IntoMessage,
-        S: Send + 'static,
-        P: Send + 'static,
-        I: Send + 'static,
+        S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + SubTypeDeclare
+            + Send
+            + Sync
+            + 'static,
+        P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + PlatformDeclare
+            + Send
+            + Sync
+            + 'static,
+        I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+            + std::fmt::Debug
+            + ImplDeclare
+            + Send
+            + Sync
+            + 'static,
     {
         use crate::builtin::{group_id_check, user_id_check};
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -146,11 +164,10 @@ impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
         if let MessageDeatilTypes::Group(group) = &self.event.detail_type {
             self.temps.insert(
                 self.event.id.clone(),
-                Box::new(temp.with_rule(group_id_check(&group.group_id)).boxed()),
+                temp.with_rule(group_id_check(&group.group_id)).boxed(),
             );
         } else {
-            self.temps
-                .insert(self.event.id.clone(), Box::new(temp.boxed()));
+            self.temps.insert(self.event.id.clone(), temp.boxed());
         }
         self.send(message.into_message()).await?;
         // todo: timeout

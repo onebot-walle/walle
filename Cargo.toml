@@ -27,7 +27,7 @@ dashmap = "5.3"
 [dependencies.walle-core]
 # version = "0.5.3"
 git = "https://github.com/abrahum/walle-core.git"
-features = ["websocket", "app-obc", "http"]
+features = ["websocket", "app-obc", "http", "alt"]
 
 [[example]]
 name = "echo"

@@ -1,6 +1,6 @@
 use crate::Signal;
 use crate::{rule_fn, Rule, Session};
-use walle_core::event::{DetailTypeDeclare, Group, Message};
+use walle_core::event::{DetailTypeDeclare, Group, Message, MessageDeatilTypes};
 
 pub struct UserIdChecker {
     pub user_id: String,
@@ -36,6 +36,17 @@ impl<S, P, I> Rule<Message, Group, S, P, I> for GroupIdChecker {
         } else {
             Signal::NotMatch
         }
+    }
+}
+
+impl<S, P, I> Rule<Message, MessageDeatilTypes, S, P, I> for GroupIdChecker {
+    fn rule(&self, session: &Session<Message, MessageDeatilTypes, S, P, I>) -> Signal {
+        if let MessageDeatilTypes::Group(Group { group_id }) = &session.event.detail_type {
+            if group_id == self.group_id.as_str() {
+                return Signal::Matched;
+            }
+        }
+        Signal::NotMatch
     }
 }
 
@@ -81,10 +92,14 @@ pub fn mention_me_rule<D, S, P, I>() -> impl Rule<Message, D, S, P, I> {
 
 pub fn to_me_rule<D: DetailTypeDeclare, S, P, I>() -> impl Rule<Message, D, S, P, I> {
     rule_fn(|session: &Session<Message, D, S, P, I>| {
-        if D::detail_type() == "private" {
+        if session.event.detail_type.detail_type() == "private" {
             Signal::Matched
         } else {
             _mention_me(session)
         }
     })
+}
+
+pub fn allways_matched<T, D, S, P, I>() -> impl Rule<T, D, S, P, I> {
+    rule_fn(|_session| Signal::Matched)
 }

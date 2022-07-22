@@ -10,6 +10,7 @@ where
     H: MatcherHandler<Message, D, S, P, I> + Sync,
 {
     strip_whitespace()
+        .with_rule(allways_matched())
         .with(strip_prefix(command))
         .layer(handler)
 }

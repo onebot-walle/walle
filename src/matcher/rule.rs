@@ -1,4 +1,4 @@
-use crate::{MatcherHandler, Session, Signal};
+use crate::{JoinedRulePreHandler, MatcherHandler, PreHandler, Session, Signal};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -21,6 +21,13 @@ pub trait Rule<T = (), D = (), S = (), P = (), I = ()> {
         R: Rule<T, D, S, P, I>,
     {
         JoinedRule(self, rule)
+    }
+    fn with_pre_handler<PR>(self, pre_handler: PR) -> JoinedRulePreHandler<Self, PR>
+    where
+        Self: Sized,
+        PR: PreHandler<T, D, S, P, I>,
+    {
+        JoinedRulePreHandler(self, pre_handler, true)
     }
 }
 

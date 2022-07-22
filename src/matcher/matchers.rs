@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::{sync::RwLock, task::JoinHandle};
+use tracing::info;
 use walle_core::prelude::WalleError;
 use walle_core::{
     action::Action, error::WalleResult, event::Event, resp::Resp, ActionHandler, EventHandler,
@@ -54,6 +55,10 @@ impl EventHandler<Event, Action, Resp, 12> for Matchers {
         Ok(vec![])
     }
     async fn call(&self, event: Event) -> WalleResult<()> {
+        use walle_core::alt::ColoredAlt;
+        if event.ty.as_str() != "meta" {
+            info!(target: "Walle", "{}", event.colored_alt());
+        }
         let ob: Arc<dyn ActionCaller + Send + 'static> =
             self.ob.read().await.clone().ok_or(WalleError::NotStarted)?;
         if let Some(k) = self.temps.iter().find_map(|i| {

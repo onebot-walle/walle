@@ -1,4 +1,4 @@
-use crate::{MatcherHandler, Session, Signal};
+use crate::{MatcherHandler, Rule, Session, Signal};
 use std::future::Future;
 use std::pin::Pin;
 
@@ -21,6 +21,13 @@ pub trait PreHandler<T = (), D = (), S = (), P = (), I = ()> {
         PR: PreHandler<T, D, S, P, I>,
     {
         JoinedPreHandler(self, pr)
+    }
+    fn with_rule<R>(self, rule: R) -> JoinedRulePreHandler<R, Self>
+    where
+        Self: Sized,
+        R: Rule<T, D, S, P, I>,
+    {
+        JoinedRulePreHandler(rule, self, false)
     }
 }
 
@@ -63,6 +70,22 @@ where
 {
     fn pre_handle(&self, session: &mut Session<T, D, S, P, I>) -> Signal {
         self.0.pre_handle(session) + self.1.pre_handle(session)
+    }
+}
+
+pub struct JoinedRulePreHandler<R, PR>(pub R, pub PR, pub bool);
+
+impl<R, PR, T, D, S, P, I> PreHandler<T, D, S, P, I> for JoinedRulePreHandler<R, PR>
+where
+    R: Rule<T, D, S, P, I> + Sync,
+    PR: PreHandler<T, D, S, P, I> + Sync,
+{
+    fn pre_handle(&self, session: &mut Session<T, D, S, P, I>) -> Signal {
+        if self.2 {
+            self.1.pre_handle(session) + self.0.rule(session)
+        } else {
+            self.0.rule(session) + self.1.pre_handle(session)
+        }
     }
 }
 

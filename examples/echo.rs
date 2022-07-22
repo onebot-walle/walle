@@ -1,17 +1,12 @@
-use walle::{
-    builtin::{echo, echo2, on_to_me},
-    config::AppConfig,
-    new_walle, Matchers,
-};
+use walle::{builtin::echo, new_walle, MatcherHandlerExt, Matchers, MatchersConfig};
+use walle_core::config::AppConfig;
 
 #[tokio::main]
 async fn main() {
-    let matchers = Matchers::default()
-        .add_message_matcher(echo().map(|h| on_to_me(h)).build())
-        .add_message_matcher(echo2().build());
-    let walle = new_walle(AppConfig::default(), matchers);
-    // let mut sche = Scheduler::new(walle.clone());
-    // sche.add(OneMinutePassed);
-    // sche.start();
-    walle.run_block().await.unwrap();
+    let matchers = Matchers::new(MatchersConfig::default()).add_matcher(echo().boxed());
+    let walle = new_walle(matchers);
+    let joins = walle.start(AppConfig::default(), (), true).await.unwrap();
+    for join in joins {
+        join.await.ok();
+    }
 }
