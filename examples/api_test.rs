@@ -3,19 +3,19 @@ use walle::{
     builtin::strip_prefix, handler_fn, new_walle, AppConfig, Matcher, MatcherHandlerExt, Matchers,
     MatchersConfig, PreHandler, Session,
 };
-use walle_core::event::{Message, MessageDeatilTypes};
+use walle_core::{
+    event::{Group, Message, MessageDeatilTypes},
+    prelude::MessageSegment,
+    value_map,
+};
 
 #[tokio::main]
 async fn main() {
-    let matchers = Matchers::new(MatchersConfig::default()).add_matcher(recall_test_plugin());
-    // .add_message_matcher(flash_test_plugin())
-    // .add_message_matcher(reply_test_plugin())
-    // .add_message_matcher(forward_test_plugin())
-    // .add_message_matcher(forward_2077_plugin())
-    // .add_message_matcher(url_image_plugin())
-    // .add_message_matcher(delete_friend_plugin())
-    // .add_message_matcher(group_temp_plugin())
-    // .add_message_matcher(voice_test_plugin());
+    let matchers = Matchers::new(MatchersConfig::default())
+        .add_matcher(recall_test_plugin())
+        .add_matcher(mute_test())
+        .add_matcher(member_test())
+        .add_matcher(forward_test_plugin());
     let walle = new_walle(matchers);
     let joins = walle.start(AppConfig::default(), (), true).await.unwrap();
     for join in joins {
@@ -41,6 +41,45 @@ fn recall_test_plugin() -> Matcher {
                 }
             },
         ))
+        .boxed()
+}
+
+fn mute_test() -> Matcher {
+    strip_prefix("./mute")
+        .layer(handler_fn(|s: Session<Message, Group>| async move {
+            use walle_core::segment::MessageExt;
+            let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
+            for mention in mentions {
+                let r = s
+                    .call(walle_core::action::Action {
+                        action: "ban_group_member".to_string(),
+                        params: value_map! {
+                            "group_id": s.event.detail_type.group_id,
+                            "user_id": s.event.ty.user_id,
+                            "duration": 60
+                        },
+                    })
+                    .await;
+                println!("{:?}", r);
+            }
+        }))
+        .boxed()
+}
+
+fn member_test() -> Matcher {
+    strip_prefix("./get_no_member")
+        .layer(handler_fn(|s: Session<Message, Group>| async move {
+            let r = s
+                .call(walle_core::action::Action {
+                    action: "get_group_member_info".to_string(),
+                    params: value_map! {
+                        "group_id": s.event.detail_type.group_id,
+                        "user_id": "80000001"
+                    },
+                })
+                .await;
+            println!("{:?}", r);
+        }))
         .boxed()
 }
 
@@ -74,95 +113,80 @@ fn recall_test_plugin() -> Matcher {
 //     .boxed()
 // }
 
-// fn forward_test_plugin() -> MessageMatcher {
-//     handler_fn(|s: Session<Message, MessageDeatilTypes>| async move {
-//         s.send(MessageSegment::Custom {
-//             ty: "forward".to_string(),
-//             data: extended_map! {
-//                 "nodes": [
-//                     {
-//                         "type": "node",
-//                         "data": {
-//                             "user_id": "80000000",
-//                             "time": 1654654105527.0,
-//                             "user_name": "mht",
-//                             "message": [
-//                                 {
-//                                     "type": "text",
-//                                     "data": {
-//                                         "text": "hello world",
-//                                     },
-//                                 }
-//                             ]
-//                         }
-//                     }
-//                 ]
-//             },
-//         })
-//         .await
-//         .unwrap();
-//     })
-//     .with_rule(strip_prefix("./forward"))
-//     .boxed()
-// }
-
-// fn forward_2077_plugin() -> MessageMatcher {
-//     handler_fn(|s: Session<Message, MessageDeatilTypes>| async move {
-//         s.send(MessageSegment::Custom {
-//             ty: "forward".to_string(),
-//             data: extended_map! {
-//                 "nodes": [
-//                     {
-//                         "type": "node",
-//                         "data": {
-//                             "user_id": "80000000",
-//                             "time": 3376692505000.0,
-//                             "user_name": "赛博朋克2077官方",
-//                             "message": [
-//                                 {
-//                                     "type": "text",
-//                                     "data": {
-//                                         "text": "还没有出哦",
-//                                     },
-//                                 }
-//                             ]
-//                         }
-//                     },
-//                     {
-//                         "type": "node",
-//                         "data": {
-//                             "user_id": "80000000",
-//                             "time": 3376692506000.0,
-//                             "user_name": "赛博朋克2077官方",
-//                             "message": [
-//                                 {
-//                                     "type": "node",
-//                                     "data": {
-//                                         "user_id": "80000000",
-//                                         "time": 3376692505000.0,
-//                                         "user_name": "赛博朋克2077官方",
-//                                         "message": [
-//                                             {
-//                                                 "type": "text",
-//                                                 "data": {
-//                                                     "text": "还没有出哦",
-//                                                 },
-//                                             }
-//                                         ]
-//                                     }
-//                                 }
-//                             ]
-//                         }
-//                     }
-//                 ]
-//             },
-//         })
-//         .await
-//         .unwrap();
-//     })
-//     .with_pre_handler(strip_prefix("2077dlc出了吗"))
-//     .boxed()
-// }
+fn forward_test_plugin() -> Matcher {
+    handler_fn(|s: Session<Message, MessageDeatilTypes>| async move {
+        let segemnt = MessageSegment {
+            ty: "node".to_string(),
+            data: value_map! {
+                "user_id": "80000000",
+                "time": 1654654105527.0,
+                "user_name": "mht",
+                "message": [
+                    {
+                        "type": "text",
+                        "data": {
+                            "text": "hello world"
+                        }
+                    }
+                ]
+            },
+        };
+        s.send(vec![
+            MessageSegment {
+                ty: "node".to_string(),
+                data: value_map! {
+                    "user_id": "80000000",
+                    "time": 1654654105527.0,
+                    "user_name": "mht",
+                    "message": [
+                        {
+                            "type": "text",
+                            "data": {
+                                "text": "hello world"
+                            }
+                        }
+                    ]
+                },
+            },
+            // MessageSegment {
+            //     ty: "text".to_string(),
+            //     data: value_map! {
+            //         "text": "this segemnt will break the nodes"
+            //     },
+            // },
+            MessageSegment {
+                ty: "node".to_string(),
+                data: value_map! {
+                    "user_id": "80000001",
+                    "time": 1654654190000.0,
+                    "user_name": "mht2",
+                    "message": [
+                        {
+                            "type": "node",
+                            "data": {
+                                "user_id": "80000000",
+                                "time": 1654654105527.0,
+                                "user_name": "mht",
+                                "message": [
+                                    {
+                                        "type": "text",
+                                        "data": {
+                                            "text": "hello world"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+            },
+        ])
+        .await
+        .unwrap();
+    })
+    .with_pre_handler(strip_prefix("./forward"))
+    .boxed()
+}
 
 // fn url_image_plugin() -> MessageMatcher {
 //     handler_fn(|s| async move {

@@ -105,7 +105,7 @@ where
 #[async_trait]
 pub trait MatcherHandler<T = (), D = (), S = (), P = (), I = ()>: Sync {
     fn pre_handle(&self, _session: &mut Session<T, D, S, P, I>) -> Signal {
-        Signal::Matched
+        Signal::NotMatch
     }
     async fn handle(&self, session: Session<T, D, S, P, I>);
 }
