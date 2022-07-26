@@ -170,11 +170,14 @@ impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
             self.temps.insert(self.event.id.clone(), temp.boxed());
         }
         self.send(message.into_message()).await?;
-        // todo: timeout
-        if let Some(event) = rx.recv().await {
-            self.event = event;
+        match tokio::time::timeout(duration, rx.recv()).await {
+            Ok(Some(event)) => {
+                self.event = event;
+                Ok(())
+            }
+            Ok(None) => Err(WalleError::Other("unexpected tx drop".to_string())),
+            Err(e) => Err(WalleError::Other(e.to_string())),
         }
-        Ok(())
     }
 }
 

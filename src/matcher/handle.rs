@@ -27,7 +27,7 @@ impl core::ops::Add for Signal {
     }
 }
 
-pub trait _MatcherHandler {
+pub trait RawMatcherHandler {
     fn call(
         &self,
         event: Event,
@@ -42,7 +42,7 @@ pub(crate) struct BoxedHandler<H, T, D, S, P, I>(
     pub std::marker::PhantomData<(T, D, S, P, I)>,
 );
 
-impl<H, T, D, S, P, I> _MatcherHandler for BoxedHandler<H, T, D, S, P, I>
+impl<H, T, D, S, P, I> RawMatcherHandler for BoxedHandler<H, T, D, S, P, I>
 where
     H: MatcherHandler<T, D, S, P, I> + Send + 'static,
     T: for<'a> TryFrom<&'a mut Event, Error = WalleError>

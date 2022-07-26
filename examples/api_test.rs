@@ -11,13 +11,16 @@ use walle_core::{
 
 #[tokio::main]
 async fn main() {
-    let matchers = Matchers::new(MatchersConfig::default())
+    let matchers = Matchers::default()
         .add_matcher(recall_test_plugin())
         .add_matcher(mute_test())
         .add_matcher(member_test())
         .add_matcher(forward_test_plugin());
     let walle = new_walle(matchers);
-    let joins = walle.start(AppConfig::default(), (), true).await.unwrap();
+    let joins = walle
+        .start(AppConfig::default(), MatchersConfig::default(), true)
+        .await
+        .unwrap();
     for join in joins {
         join.await.ok();
     }
@@ -55,7 +58,7 @@ fn mute_test() -> Matcher {
                         action: "ban_group_member".to_string(),
                         params: value_map! {
                             "group_id": s.event.detail_type.group_id,
-                            "user_id": s.event.ty.user_id,
+                            "user_id": mention.user_id,
                             "duration": 60
                         },
                     })
@@ -115,22 +118,6 @@ fn member_test() -> Matcher {
 
 fn forward_test_plugin() -> Matcher {
     handler_fn(|s: Session<Message, MessageDeatilTypes>| async move {
-        let segemnt = MessageSegment {
-            ty: "node".to_string(),
-            data: value_map! {
-                "user_id": "80000000",
-                "time": 1654654105527.0,
-                "user_name": "mht",
-                "message": [
-                    {
-                        "type": "text",
-                        "data": {
-                            "text": "hello world"
-                        }
-                    }
-                ]
-            },
-        };
         s.send(vec![
             MessageSegment {
                 ty: "node".to_string(),

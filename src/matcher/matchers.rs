@@ -1,4 +1,4 @@
-use super::_MatcherHandler;
+use super::RawMatcherHandler;
 use crate::{ActionCaller, Signal};
 use crate::{MatchersConfig, MatchersHook};
 use async_trait::async_trait;
@@ -12,27 +12,19 @@ use walle_core::{
     OneBot,
 };
 
-pub type Matcher = Box<dyn _MatcherHandler + Send + Sync + 'static>;
-pub(crate) type TempMatchers = Arc<DashMap<String, Matcher>>;
+pub type Matcher = Box<dyn RawMatcherHandler + Send + Sync + 'static>;
+pub type TempMatchers = Arc<DashMap<String, Matcher>>;
 
+#[derive(Default)]
 pub struct Matchers {
     pub inner: Vec<Matcher>,
-    pub config: Arc<MatchersConfig>,
+    pub config: RwLock<Arc<MatchersConfig>>,
     temps: TempMatchers,
     hooks: Vec<Box<dyn MatchersHook + Send + 'static>>,
-    ob: tokio::sync::RwLock<Option<Arc<dyn ActionCaller + Send + 'static>>>,
+    ob: RwLock<Option<Arc<dyn ActionCaller + Send + 'static>>>,
 }
 
 impl Matchers {
-    pub fn new(config: MatchersConfig) -> Self {
-        Self {
-            config: Arc::new(config),
-            inner: Vec::new(),
-            temps: Arc::default(),
-            hooks: Vec::new(),
-            ob: RwLock::default(),
-        }
-    }
     pub fn add_matcher(mut self, matcher: Matcher) -> Self {
         self.inner.push(matcher);
         self
@@ -41,17 +33,22 @@ impl Matchers {
 
 #[async_trait]
 impl EventHandler<Event, Action, Resp, 12> for Matchers {
-    type Config = ();
+    type Config = MatchersConfig;
     async fn start<AH, EH>(
         &self,
         ob: &Arc<OneBot<AH, EH, 12>>,
-        _config: (),
+        config: MatchersConfig,
     ) -> WalleResult<Vec<JoinHandle<()>>>
     where
         AH: ActionHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
         EH: EventHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
     {
         *self.ob.write().await = Some(ob.clone());
+        *self.config.write().await = Arc::new(config);
+        let ob = self.ob.read().await.clone().unwrap();
+        for hook in self.hooks.iter() {
+            hook.on_start(&ob).await
+        }
         Ok(vec![])
     }
     async fn call(&self, event: Event) -> WalleResult<()> {
@@ -61,11 +58,9 @@ impl EventHandler<Event, Action, Resp, 12> for Matchers {
         }
         let ob: Arc<dyn ActionCaller + Send + 'static> =
             self.ob.read().await.clone().ok_or(WalleError::NotStarted)?;
+        let config = self.config.read().await.clone();
         if let Some(k) = self.temps.iter().find_map(|i| {
-            if i.value()
-                .call(event.clone(), &self.config, &ob, &self.temps)
-                != Signal::NotMatch
-            {
+            if i.value().call(event.clone(), &config, &ob, &self.temps) != Signal::NotMatch {
                 Some(i.key().to_string())
             } else {
                 None
@@ -75,14 +70,17 @@ impl EventHandler<Event, Action, Resp, 12> for Matchers {
             return Ok(());
         }
         for matcher in &self.inner {
-            if matcher.call(event.clone(), &self.config, &ob, &self.temps) == Signal::MatchAndBlock
-            {
+            if matcher.call(event.clone(), &config, &ob, &self.temps) == Signal::MatchAndBlock {
                 return Ok(());
             }
         }
         Ok(())
     }
     async fn shutdown(&self) {
+        let ob = self.ob.read().await.clone().unwrap();
+        for hook in self.hooks.iter() {
+            hook.on_shutdown(&ob).await;
+        }
         *self.ob.write().await = None;
     }
 }

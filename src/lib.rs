@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use walle_core::{action::Action, obc::AppOBC, resp::Resp, OneBot};
 
-mod matcher;
+pub mod matcher;
 // #[cfg(feature = "scheduler")]
 // mod scheduler;
 mod utils;
@@ -12,6 +12,7 @@ pub mod config;
 
 pub use config::*;
 pub use matcher::*;
+pub use walle_core;
 // #[cfg(feature = "scheduler")]
 // pub use scheduler::*;
 
