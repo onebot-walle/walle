@@ -1,4 +1,4 @@
-use crate::{ActionCaller, Matcher, MatchersConfig, TempMatchers};
+use crate::{ActionCaller, Matcher, MatchersConfig, ReplyAbleSession, TempMatchers};
 
 use super::{LayeredPreHandler, LayeredRule, PreHandler, Rule, Session};
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use walle_core::{
     event::{DetailTypeDeclare, Event, ImplDeclare, PlatformDeclare, SubTypeDeclare, TypeDeclare},
     prelude::WalleError,
+    segment::IntoMessage,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -192,13 +193,13 @@ pub struct HandlerFn<H>(H);
 
 pub fn handler_fn<H, T, D, S, P, I, Fut>(inner: H) -> HandlerFn<H>
 where
-    H: Fn(Session<T, D, S, P, I>) -> Fut + Send + Sync,
+    H: Fn(Session<T, D, S, P, I>) -> Fut + Send,
     Fut: Future<Output = ()> + Send,
-    T: Sync + Send + 'static,
-    D: Sync + Send + 'static,
-    S: Sync + Send + 'static,
-    P: Sync + Send + 'static,
-    I: Sync + Send + 'static,
+    T: Send + 'static,
+    D: Send + 'static,
+    S: Send + 'static,
+    P: Send + 'static,
+    I: Send + 'static,
 {
     HandlerFn(inner)
 }
@@ -222,6 +223,45 @@ where
         Self: 'b,
     {
         Box::pin(self.0(session))
+    }
+}
+
+pub struct MayFailHandlerFn<H, M>(H, std::marker::PhantomData<M>);
+
+pub fn may_fail_handler_fn<H, T, D, S, P, I, Fut, M>(inner: H) -> MayFailHandlerFn<H, M>
+where
+    H: Fn(Session<T, D, S, P, I>) -> Fut + Send + Sync,
+    Fut: Future<Output = Result<(), M>> + Send,
+    T: Clone + Send + Sync + 'static,
+    D: Clone + Send + Sync + 'static,
+    S: Clone + Send + Sync + 'static,
+    P: Clone + Send + Sync + 'static,
+    I: Clone + Send + Sync + 'static,
+    M: IntoMessage + Send + Sync + 'static,
+    Session<T, D, S, P, I>: ReplyAbleSession,
+{
+    MayFailHandlerFn(inner, std::marker::PhantomData::default())
+}
+
+#[async_trait]
+impl<T, D, S, P, I, H, Fut, M> MatcherHandler<T, D, S, P, I> for MayFailHandlerFn<H, M>
+where
+    H: Fn(Session<T, D, S, P, I>) -> Fut + Send + Sync,
+    Fut: Future<Output = Result<(), M>> + Send,
+    T: Clone + Send + Sync + 'static,
+    D: Clone + Send + Sync + 'static,
+    S: Clone + Send + Sync + 'static,
+    P: Clone + Send + Sync + 'static,
+    I: Clone + Send + Sync + 'static,
+    M: IntoMessage + Send + Sync + 'static,
+    Session<T, D, S, P, I>: ReplyAbleSession,
+{
+    async fn handle(&self, session: Session<T, D, S, P, I>) {
+        let s = session.clone();
+        if let Err(e) = self.0(s).await {
+            session.send("Matcher Error:").await.ok();
+            session.send(e.into_message()).await.ok();
+        }
     }
 }
 

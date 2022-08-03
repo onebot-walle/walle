@@ -1,7 +1,7 @@
 use tracing::info;
 use walle::{
     builtin::strip_prefix, handler_fn, new_walle, AppConfig, Matcher, MatcherHandlerExt, Matchers,
-    MatchersConfig, PreHandler, Session,
+    MatchersConfig, PreHandler, ReplyAbleSession, Session,
 };
 use walle_core::{
     event::{Group, Message, MessageDeatilTypes},

@@ -35,3 +35,7 @@ required-features = ["scheduler"]
 
 [dev-dependencies]
 tokio = { version = "1.17", features = ["full"] }
+walle-plugin-wakatime = { path = "plugins/walle-plugin-wakatime" }
+
+[workspace]
+members = ["plugins/walle-plugin-wakatime"]

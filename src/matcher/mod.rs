@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use walle_core::{
     action::SendMessage,
     event::{
@@ -72,6 +72,19 @@ impl<D, S, P, I> Session<Message, D, S, P, I> {
     }
 }
 
+#[async_trait]
+pub trait ReplyAbleSession {
+    async fn send<M: IntoMessage + Send + 'static>(
+        &self,
+        message: M,
+    ) -> WalleResult<SendMessageResp>;
+    async fn get<M: IntoMessage + Send + 'static>(
+        &mut self,
+        message: M,
+        timeout: Option<Duration>,
+    ) -> WalleResult<()>;
+}
+
 impl<S, P, I> Session<Message, Private, S, P, I> {
     pub async fn send(&self, message: Segments) -> WalleResult<SendMessageResp> {
         self.call(
@@ -110,8 +123,32 @@ impl<S, P, I> Session<Message, Group, S, P, I> {
     }
 }
 
-impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
-    pub async fn send<M: IntoMessage>(&self, message: M) -> WalleResult<SendMessageResp> {
+#[async_trait]
+impl<S, P, I> ReplyAbleSession for Session<Message, MessageDeatilTypes, S, P, I>
+where
+    S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + SubTypeDeclare
+        + Send
+        + Sync
+        + 'static,
+    P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + PlatformDeclare
+        + Send
+        + Sync
+        + 'static,
+    I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
+        + std::fmt::Debug
+        + ImplDeclare
+        + Send
+        + Sync
+        + 'static,
+{
+    async fn send<M: IntoMessage + Send + 'static>(
+        &self,
+        message: M,
+    ) -> WalleResult<SendMessageResp> {
         let group_id = match &self.event.detail_type {
             MessageDeatilTypes::Group(group) => Some(group.group_id.clone()),
             _ => None,
@@ -135,28 +172,9 @@ impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
         .as_result()?
         .try_into()
     }
-
-    pub async fn get<M>(&mut self, message: M, duration: std::time::Duration) -> WalleResult<()>
+    async fn get<M>(&mut self, message: M, duration: Option<Duration>) -> WalleResult<()>
     where
-        M: IntoMessage,
-        S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + SubTypeDeclare
-            + Send
-            + Sync
-            + 'static,
-        P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + PlatformDeclare
-            + Send
-            + Sync
-            + 'static,
-        I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + ImplDeclare
-            + Send
-            + Sync
-            + 'static,
+        M: IntoMessage + Send + 'static,
     {
         use crate::builtin::{group_id_check, user_id_check};
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
@@ -170,7 +188,7 @@ impl<S, P, I> Session<Message, MessageDeatilTypes, S, P, I> {
             self.temps.insert(self.event.id.clone(), temp.boxed());
         }
         self.send(message.into_message()).await?;
-        match tokio::time::timeout(duration, rx.recv()).await {
+        match tokio::time::timeout(duration.unwrap_or(Duration::from_secs(30)), rx.recv()).await {
             Ok(Some(event)) => {
                 self.event = event;
                 Ok(())

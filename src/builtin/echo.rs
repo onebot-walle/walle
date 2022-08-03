@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin};
 
 use super::on_command;
-use crate::{MatcherHandler, Session};
+use crate::{MatcherHandler, ReplyAbleSession, Session};
 use async_trait::async_trait;
 use walle_core::event::{Message, MessageDeatilTypes};
 
@@ -23,9 +23,7 @@ fn _echo2(
     mut session: Session<Message, MessageDeatilTypes>,
 ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
     Box::pin(async move {
-        let _ = session
-            .get("input message", std::time::Duration::from_secs(10))
-            .await;
+        let _ = session.get("input message", None).await;
         let _ = session.send(session.event.ty.message.clone()).await;
     })
 }
