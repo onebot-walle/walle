@@ -1,6 +1,6 @@
 use walle::{
     builtin::{strip_prefix, strip_whitespace},
-    handler_fn, may_fail_handler_fn,
+    may_fail_handler_fn,
     walle_core::{
         event::{Message, MessageDeatilTypes},
         util::ValueMapExt,
@@ -20,23 +20,12 @@ fn session_id(s: &Session<Message, MessageDeatilTypes>) -> String {
     }
 }
 
-async fn send_all(s: &Session<Message, MessageDeatilTypes>, r: Result<String, String>) {
-    match r {
-        Ok(msg) => {
-            s.send(msg).await.ok();
-        }
-        Err(e) => {
-            s.send(format!("error: {e}")).await.ok();
-        }
-    }
-}
-
 pub fn set_api_key() -> Matcher {
     strip_prefix("waka开卷")
         .with(strip_whitespace())
         .layer(may_fail_handler_fn(
-            |s: Session<Message, MessageDeatilTypes>| {
-                async move {
+            |s: &Session<Message, MessageDeatilTypes>| {
+                Box::pin(async move {
                     let mut data = users::load_users().await?;
                     let map = data.entry(session_id(&s)).or_default();
                     map.insert(
@@ -46,41 +35,73 @@ pub fn set_api_key() -> Matcher {
                     users::save_users(&data).await?;
                     s.send("设置完毕，可以开始卷哩").await.ok();
                     Ok::<_, String>(())
-                }
+                })
             },
         ))
         .boxed()
 }
 
-async fn _today_rank(s: &Session<Message, MessageDeatilTypes>) -> Result<String, String> {
-    let data = users::load_users().await?;
-    let api_keys = data.get(&session_id(&s)).ok_or("api_keys not found")?;
-    let today = data_source::get_today(api_keys).await;
-    println!("{:?}", today);
-    let mut oks = String::from("今日排行：\n");
-    let mut errs = String::default();
-    for (name, v) in today.iter() {
-        match v {
-            Ok(today) => oks.push_str(&format!("{}: {}\n", name, today.data.digital)),
-            Err(e) => {
-                errs.push_str(e);
-                errs.push('\n');
-            }
-        }
-    }
-    if !errs.is_empty() {
-        oks.push_str("\nerrors:\n");
-        oks.push_str(&errs);
-    }
-    Ok(oks)
-}
-
 pub fn today_rank() -> Matcher {
     strip_prefix("waka今日排行")
-        .with(strip_whitespace())
-        .layer(handler_fn(
-            |s: Session<Message, MessageDeatilTypes>| async move {
-                send_all(&s, _today_rank(&s).await).await
+        .layer(may_fail_handler_fn(
+            |s: &Session<Message, MessageDeatilTypes>| {
+                Box::pin(async move {
+                    let data = users::load_users().await?;
+                    let api_keys = data.get(&session_id(&s)).ok_or("api_keys not found")?;
+                    let today = data_source::get_today(api_keys).await;
+                    let mut oks = String::from("今日排行: ");
+                    let mut errs = String::default();
+                    for (name, v) in today.iter() {
+                        match v {
+                            Ok(today) => {
+                                oks.push_str(&format!("\n{}: {}", name, today.data.digital))
+                            }
+                            Err(e) => {
+                                errs.push('\n');
+                                errs.push_str(e);
+                            }
+                        }
+                    }
+                    if !errs.is_empty() {
+                        oks.push_str("\nerrors:\n");
+                        oks.push_str(&errs);
+                    }
+                    s.send(oks).await.ok();
+                    Ok::<_, String>(())
+                })
+            },
+        ))
+        .boxed()
+}
+
+pub fn weeks_rank() -> Matcher {
+    strip_prefix("waka本周排行")
+        .layer(may_fail_handler_fn(
+            |s: &Session<Message, MessageDeatilTypes>| {
+                Box::pin(async move {
+                    let data = users::load_users().await?;
+                    let api_keys = data.get(&session_id(&s)).ok_or("api_keys not found")?;
+                    let weeks = data_source::get_weekdays(api_keys).await;
+                    let mut oks = String::from("本周排行: ");
+                    let mut errs = String::default();
+                    for (name, v) in weeks.iter() {
+                        match v {
+                            Ok(v) => {
+                                oks.push_str(&format!("\n{}: {}h", name, v.total_seconds / 3600.0))
+                            }
+                            Err(e) => {
+                                errs.push('\n');
+                                errs.push_str(e);
+                            }
+                        }
+                    }
+                    if !errs.is_empty() {
+                        oks.push_str("\nerrors:\n");
+                        oks.push_str(&errs);
+                    }
+                    s.send(oks).await.ok();
+                    Ok::<_, String>(())
+                })
             },
         ))
         .boxed()

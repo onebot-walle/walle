@@ -228,10 +228,13 @@ where
 
 pub struct MayFailHandlerFn<H, M>(H, std::marker::PhantomData<M>);
 
-pub fn may_fail_handler_fn<H, T, D, S, P, I, Fut, M>(inner: H) -> MayFailHandlerFn<H, M>
+pub fn may_fail_handler_fn<H, T, D, S, P, I, M>(inner: H) -> MayFailHandlerFn<H, M>
 where
-    H: Fn(Session<T, D, S, P, I>) -> Fut + Send + Sync,
-    Fut: Future<Output = Result<(), M>> + Send,
+    H: for<'a> Fn(
+            &'a Session<T, D, S, P, I>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), M>> + Send + 'a>>
+        + Send
+        + Sync,
     T: Clone + Send + Sync + 'static,
     D: Clone + Send + Sync + 'static,
     S: Clone + Send + Sync + 'static,
@@ -244,10 +247,13 @@ where
 }
 
 #[async_trait]
-impl<T, D, S, P, I, H, Fut, M> MatcherHandler<T, D, S, P, I> for MayFailHandlerFn<H, M>
+impl<T, D, S, P, I, H, M> MatcherHandler<T, D, S, P, I> for MayFailHandlerFn<H, M>
 where
-    H: Fn(Session<T, D, S, P, I>) -> Fut + Send + Sync,
-    Fut: Future<Output = Result<(), M>> + Send,
+    H: for<'a> Fn(
+            &'a Session<T, D, S, P, I>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), M>> + Send + 'a>>
+        + Send
+        + Sync,
     T: Clone + Send + Sync + 'static,
     D: Clone + Send + Sync + 'static,
     S: Clone + Send + Sync + 'static,
@@ -257,8 +263,7 @@ where
     Session<T, D, S, P, I>: ReplyAbleSession,
 {
     async fn handle(&self, session: Session<T, D, S, P, I>) {
-        let s = session.clone();
-        if let Err(e) = self.0(s).await {
+        if let Err(e) = self.0(&session).await {
             session.send("Matcher Error:").await.ok();
             session.send(e.into_message()).await.ok();
         }
