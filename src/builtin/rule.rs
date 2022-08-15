@@ -79,7 +79,7 @@ fn _mention_me<D, S, P, I>(session: &Session<Message, D, S, P, I>) -> Signal {
         }
     }
     for mention in session.event.ty.message.clone().extract::<Mention>() {
-        if mention.user_id == session.event.self_id {
+        if mention.user_id == session.event.ty.selft.user_id {
             return Signal::Matched;
         }
     }

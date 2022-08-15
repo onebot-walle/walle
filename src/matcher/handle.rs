@@ -88,7 +88,6 @@ where
                     temp.clone(),
                 );
                 let signal = self.0.pre_handle(&mut session);
-                println!("{}:{:?}", session.event.detail_type.detail_type(), signal);
                 let handler = self.0.clone();
                 if signal != Signal::NotMatch {
                     tokio::spawn(async move {

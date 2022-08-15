@@ -56,6 +56,7 @@ fn mute_test() -> Matcher {
                 let r = s
                     .call(walle_core::action::Action {
                         action: "ban_group_member".to_string(),
+                        selft: Some(s.event.ty.selft.clone()),
                         params: value_map! {
                             "group_id": s.event.detail_type.group_id,
                             "user_id": mention.user_id,
@@ -75,6 +76,7 @@ fn member_test() -> Matcher {
             let r = s
                 .call(walle_core::action::Action {
                     action: "get_group_member_info".to_string(),
+                    selft: Some(s.event.ty.selft.clone()),
                     params: value_map! {
                         "group_id": s.event.detail_type.group_id,
                         "user_id": "80000001"

@@ -19,7 +19,7 @@ pub use walle_core;
 pub mod builtin;
 
 /// 构造一个新的 Walle 实例
-pub fn new_walle(matchers: Matchers) -> Arc<OneBot<AppOBC<Action, Resp>, Matchers, 12>> {
+pub fn new_walle(matchers: Matchers) -> Arc<OneBot<AppOBC<Action, Resp>, Matchers>> {
     let timer = tracing_subscriber::fmt::time::OffsetTime::new(
         time::UtcOffset::from_hms(8, 0, 0).unwrap(),
         time::format_description::parse(
@@ -32,5 +32,5 @@ pub fn new_walle(matchers: Matchers) -> Arc<OneBot<AppOBC<Action, Resp>, Matcher
         .with_env_filter(env)
         .with_timer(timer)
         .init();
-    Arc::new(walle_core::OneBot::new_12(AppOBC::new(), matchers))
+    Arc::new(walle_core::OneBot::new(AppOBC::new(), matchers))
 }

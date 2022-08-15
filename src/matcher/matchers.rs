@@ -32,16 +32,16 @@ impl Matchers {
 }
 
 #[async_trait]
-impl EventHandler<Event, Action, Resp, 12> for Matchers {
+impl EventHandler<Event, Action, Resp> for Matchers {
     type Config = MatchersConfig;
     async fn start<AH, EH>(
         &self,
-        ob: &Arc<OneBot<AH, EH, 12>>,
+        ob: &Arc<OneBot<AH, EH>>,
         config: MatchersConfig,
     ) -> WalleResult<Vec<JoinHandle<()>>>
     where
-        AH: ActionHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
-        EH: EventHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
+        AH: ActionHandler<Event, Action, Resp> + Send + Sync + 'static,
+        EH: EventHandler<Event, Action, Resp> + Send + Sync + 'static,
     {
         *self.ob.write().await = Some(ob.clone());
         *self.config.write().await = Arc::new(config);

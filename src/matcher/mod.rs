@@ -5,7 +5,8 @@ use walle_core::{
         Group, ImplDeclare, Message, MessageDeatilTypes, PlatformDeclare, Private, SubTypeDeclare,
     },
     prelude::*,
-    structs::SendMessageResp,
+    structs::{Selft, SendMessageResp},
+    util::GetSelf,
 };
 
 use crate::MatchersConfig;
@@ -52,10 +53,13 @@ impl<T, D, S, P, I> Session<T, D, S, P, I> {
         }
     }
 
-    pub async fn call(&self, mut action: Action) -> WalleResult<Resp> {
+    pub async fn call(&self, mut action: Action) -> WalleResult<Resp>
+    where
+        T: GetSelf,
+    {
         action
             .params
-            .insert("self_id".to_string(), self.event.self_id.as_str().into());
+            .insert("self".to_string(), self.event.ty.get_self().into());
         self.caller.call(action).await
     }
 }
@@ -201,7 +205,7 @@ where
 
 #[derive(Clone)]
 pub struct Bot {
-    pub self_id: String,
+    pub self_id: Selft,
     pub caller: Arc<dyn ActionCaller + Send + 'static>,
 }
 
@@ -209,7 +213,7 @@ impl Bot {
     pub async fn call(&self, mut action: Action) -> WalleResult<Resp> {
         action
             .params
-            .insert("self_id".to_string(), self.self_id.as_str().into());
+            .insert("self".to_string(), self.self_id.clone().into());
         self.caller.call(action).await
     }
 }
@@ -221,10 +225,10 @@ pub trait ActionCaller: Sync {
 }
 
 #[async_trait]
-impl<AH, EH> ActionCaller for OneBot<AH, EH, 12>
+impl<AH, EH> ActionCaller for OneBot<AH, EH>
 where
-    AH: ActionHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
-    EH: EventHandler<Event, Action, Resp, 12> + Send + Sync + 'static,
+    AH: ActionHandler<Event, Action, Resp> + Send + Sync + 'static,
+    EH: EventHandler<Event, Action, Resp> + Send + Sync + 'static,
 {
     fn call<'a, 't>(
         &'a self,
@@ -239,7 +243,7 @@ where
 
     async fn get_bots(self: Arc<Self>) -> Vec<Bot> {
         self.action_handler
-            .self_ids()
+            .get_selfs()
             .await
             .into_iter()
             .map(|id| Bot {

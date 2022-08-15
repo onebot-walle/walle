@@ -71,7 +71,7 @@ pub fn strip_whitespace<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
 
 fn _mention_me<D, S, P, I>(session: &mut Session<Message, D, S, P, I>) -> Signal {
     let segments = &mut session.event.ty.message;
-    let self_id = Value::Str(session.event.self_id.clone());
+    let self_id = Value::Str(session.event.ty.selft.user_id.clone());
     for i in 0..segments.len() {
         let seg = segments.get(i).unwrap();
         if seg.ty.as_str() == "mention" {
