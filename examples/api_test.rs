@@ -33,12 +33,9 @@ fn recall_test_plugin() -> Matcher {
                 info!(target: "api_test", "start api test");
                 if let Ok(m) = s.send("hello world").await {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    s.call(
-                        walle_core::action::DeleteMessage {
-                            message_id: m.message_id,
-                        }
-                        .into(),
-                    )
+                    s.call(walle_core::action::DeleteMessage {
+                        message_id: m.message_id,
+                    })
                     .await
                     .ok();
                 }
@@ -54,7 +51,7 @@ fn mute_test() -> Matcher {
             let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
             for mention in mentions {
                 let r = s
-                    .call(walle_core::action::Action {
+                    .call_action(walle_core::action::Action {
                         action: "ban_group_member".to_string(),
                         selft: Some(s.event.ty.selft.clone()),
                         params: value_map! {
@@ -74,7 +71,7 @@ fn member_test() -> Matcher {
     strip_prefix("./get_no_member")
         .layer(handler_fn(|s: Session<Message, Group>| async move {
             let r = s
-                .call(walle_core::action::Action {
+                .call_action(walle_core::action::Action {
                     action: "get_group_member_info".to_string(),
                     selft: Some(s.event.ty.selft.clone()),
                     params: value_map! {

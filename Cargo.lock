@@ -1334,7 +1334,7 @@ dependencies = [
 [[package]]
 name = "walle-core"
 version = "0.6.1"
-source = "git+https://github.com/abrahum/walle-core.git#90b73fe4efe4a099e267480475476f09278949d7"
+source = "git+https://github.com/abrahum/walle-core.git#a021cc0ff89f4ceb41f7f8a99a79fa83148f3f34"
 dependencies = [
  "async-trait",
  "base64",
@@ -1358,7 +1358,7 @@ dependencies = [
 [[package]]
 name = "walle-macro"
 version = "0.6.0"
-source = "git+https://github.com/abrahum/walle-core.git#90b73fe4efe4a099e267480475476f09278949d7"
+source = "git+https://github.com/abrahum/walle-core.git#a021cc0ff89f4ceb41f7f8a99a79fa83148f3f34"
 dependencies = [
  "proc-macro2",
  "quote",

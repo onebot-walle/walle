@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use walle_core::{
-    action::SendMessage,
+    action::{ActionDeclare, SendMessage},
     event::{
         Group, ImplDeclare, Message, MessageDeatilTypes, PlatformDeclare, Private, SubTypeDeclare,
     },
@@ -53,13 +53,15 @@ impl<T, D, S, P, I> Session<T, D, S, P, I> {
         }
     }
 
-    pub async fn call(&self, mut action: Action) -> WalleResult<Resp>
+    pub async fn call<A: ActionDeclare + Into<ValueMap>>(&self, action: A) -> WalleResult<Resp>
     where
         T: GetSelf,
     {
-        action
-            .params
-            .insert("self".to_string(), self.event.ty.get_self().into());
+        let action: Action = (action, self.event.ty.get_self()).into();
+        self.caller.call(action).await
+    }
+
+    pub async fn call_action(&self, action: Action) -> WalleResult<Resp> {
         self.caller.call(action).await
     }
 }
@@ -91,17 +93,14 @@ pub trait ReplyAbleSession {
 
 impl<S, P, I> Session<Message, Private, S, P, I> {
     pub async fn send(&self, message: Segments) -> WalleResult<SendMessageResp> {
-        self.call(
-            SendMessage {
-                detail_type: "private".to_string(),
-                user_id: Some(self.event.ty.user_id.clone()),
-                group_id: None,
-                channel_id: None,
-                guild_id: None,
-                message,
-            }
-            .into(),
-        )
+        self.call(SendMessage {
+            detail_type: "private".to_string(),
+            user_id: Some(self.event.ty.user_id.clone()),
+            group_id: None,
+            channel_id: None,
+            guild_id: None,
+            message,
+        })
         .await?
         .as_result()?
         .try_into()
@@ -110,17 +109,14 @@ impl<S, P, I> Session<Message, Private, S, P, I> {
 
 impl<S, P, I> Session<Message, Group, S, P, I> {
     pub async fn send(&self, message: Segments) -> WalleResult<SendMessageResp> {
-        self.call(
-            SendMessage {
-                detail_type: "group".to_string(),
-                user_id: Some(self.event.ty.user_id.clone()),
-                group_id: Some(self.event.detail_type.group_id.clone()),
-                channel_id: None,
-                guild_id: None,
-                message,
-            }
-            .into(),
-        )
+        self.call(SendMessage {
+            detail_type: "group".to_string(),
+            user_id: Some(self.event.ty.user_id.clone()),
+            group_id: Some(self.event.detail_type.group_id.clone()),
+            channel_id: None,
+            guild_id: None,
+            message,
+        })
         .await?
         .as_result()?
         .try_into()
@@ -157,21 +153,18 @@ where
             MessageDeatilTypes::Group(group) => Some(group.group_id.clone()),
             _ => None,
         };
-        self.call(
-            SendMessage {
-                detail_type: if group_id.is_some() {
-                    "group".to_string()
-                } else {
-                    "private".to_string()
-                },
-                user_id: Some(self.event.ty.user_id.clone()),
-                group_id,
-                channel_id: None,
-                guild_id: None,
-                message: message.into_message(),
-            }
-            .into(),
-        )
+        self.call(SendMessage {
+            detail_type: if group_id.is_some() {
+                "group".to_string()
+            } else {
+                "private".to_string()
+            },
+            user_id: Some(self.event.ty.user_id.clone()),
+            group_id,
+            channel_id: None,
+            guild_id: None,
+            message: message.into_message(),
+        })
         .await?
         .as_result()?
         .try_into()
@@ -205,15 +198,13 @@ where
 
 #[derive(Clone)]
 pub struct Bot {
-    pub self_id: Selft,
+    pub selft: Selft,
     pub caller: Arc<dyn ActionCaller + Send + 'static>,
 }
 
 impl Bot {
-    pub async fn call(&self, mut action: Action) -> WalleResult<Resp> {
-        action
-            .params
-            .insert("self".to_string(), self.self_id.clone().into());
+    pub async fn call<T: ActionDeclare + Into<ValueMap>>(&self, action: T) -> WalleResult<Resp> {
+        let action = (action, self.selft.clone()).into();
         self.caller.call(action).await
     }
 }
@@ -247,7 +238,7 @@ where
             .await
             .into_iter()
             .map(|id| Bot {
-                self_id: id,
+                selft: id,
                 caller: self.clone(),
             })
             .collect()
