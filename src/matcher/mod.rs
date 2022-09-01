@@ -176,13 +176,14 @@ where
         use crate::builtin::{group_id_check, user_id_check};
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let temp = TempMatcher { tx }.with_rule(user_id_check(&self.event.ty.user_id));
+        let mut temps = self.temps.lock().await;
         if let MessageDeatilTypes::Group(group) = &self.event.detail_type {
-            self.temps.insert(
+            temps.insert(
                 self.event.id.clone(),
                 temp.with_rule(group_id_check(&group.group_id)).boxed(),
             );
         } else {
-            self.temps.insert(self.event.id.clone(), temp.boxed());
+            temps.insert(self.event.id.clone(), temp.boxed());
         }
         self.send(message.into_message()).await?;
         match tokio::time::timeout(duration.unwrap_or(Duration::from_secs(30)), rx.recv()).await {
@@ -210,7 +211,7 @@ impl Bot {
 }
 
 #[async_trait]
-pub trait ActionCaller: Sync {
+pub trait ActionCaller: GetSelfs + Sync {
     async fn call(&self, action: Action) -> WalleResult<Resp>;
     async fn get_bots(self: Arc<Self>) -> Vec<Bot>;
 }
@@ -221,20 +222,12 @@ where
     AH: ActionHandler<Event, Action, Resp> + Send + Sync + 'static,
     EH: EventHandler<Event, Action, Resp> + Send + Sync + 'static,
 {
-    fn call<'a, 't>(
-        &'a self,
-        action: Action,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<Resp>> + Send + 't>>
-    where
-        'a: 't,
-        Self: 't,
-    {
-        self.action_handler.call(action)
+    async fn call(&self, action: Action) -> WalleResult<Resp> {
+        self.handle_action(action).await
     }
 
     async fn get_bots(self: Arc<Self>) -> Vec<Bot> {
-        self.action_handler
-            .get_selfs()
+        self.get_selfs()
             .await
             .into_iter()
             .map(|id| Bot {
@@ -261,6 +254,33 @@ impl ActionCaller for Bot {
         Self: 't,
     {
         self.caller.clone().get_bots()
+    }
+}
+
+impl GetSelfs for Bot {
+    fn get_impl<'life0, 'life1, 'async_trait>(
+        &'life0 self,
+        selft: &'life1 Selft,
+    ) -> core::pin::Pin<
+        Box<dyn core::future::Future<Output = String> + core::marker::Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
+        self.caller.get_impl(selft)
+    }
+    fn get_selfs<'life0, 'async_trait>(
+        &'life0 self,
+    ) -> core::pin::Pin<
+        Box<dyn core::future::Future<Output = Vec<Selft>> + core::marker::Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        self.caller.get_selfs()
     }
 }
 

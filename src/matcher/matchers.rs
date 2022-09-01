@@ -2,9 +2,12 @@ use super::RawMatcherHandler;
 use crate::{ActionCaller, Signal};
 use crate::{MatchersConfig, MatchersHook};
 use async_trait::async_trait;
-use dashmap::DashMap;
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::{sync::RwLock, task::JoinHandle};
+use tokio::{
+    sync::{Mutex, RwLock},
+    task::JoinHandle,
+};
 use tracing::info;
 use walle_core::prelude::WalleError;
 use walle_core::{
@@ -13,7 +16,7 @@ use walle_core::{
 };
 
 pub type Matcher = Box<dyn RawMatcherHandler + Send + Sync + 'static>;
-pub type TempMatchers = Arc<DashMap<String, Matcher>>;
+pub type TempMatchers = Arc<Mutex<HashMap<String, Matcher>>>;
 
 #[derive(Default)]
 pub struct Matchers {
@@ -28,6 +31,27 @@ impl Matchers {
     pub fn add_matcher(mut self, matcher: Matcher) -> Self {
         self.inner.push(matcher);
         self
+    }
+    async fn temp_call(
+        &self,
+        event: &Event,
+        config: &Arc<MatchersConfig>,
+        ob: &Arc<dyn ActionCaller + Send + 'static>,
+    ) -> bool {
+        let mut matched_temp_key: Option<String> = None;
+        let mut temps = self.temps.lock().await;
+        for temp in temps.iter() {
+            if temp.1.call(event.clone(), &config, ob, &self.temps).await != Signal::NotMatch {
+                matched_temp_key = Some(temp.0.to_owned());
+                break;
+            }
+        }
+        if let Some(key) = matched_temp_key {
+            temps.remove(&key);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -59,18 +83,12 @@ impl EventHandler<Event, Action, Resp> for Matchers {
         let ob: Arc<dyn ActionCaller + Send + 'static> =
             self.ob.read().await.clone().ok_or(WalleError::NotStarted)?;
         let config = self.config.read().await.clone();
-        if let Some(k) = self.temps.iter().find_map(|i| {
-            if i.value().call(event.clone(), &config, &ob, &self.temps) != Signal::NotMatch {
-                Some(i.key().to_string())
-            } else {
-                None
-            }
-        }) {
-            self.temps.remove(&k);
+        if self.temp_call(&event, &config, &ob).await {
             return Ok(());
         }
         for matcher in &self.inner {
-            if matcher.call(event.clone(), &config, &ob, &self.temps) == Signal::MatchAndBlock {
+            if matcher.call(event.clone(), &config, &ob, &self.temps).await == Signal::MatchAndBlock
+            {
                 return Ok(());
             }
         }

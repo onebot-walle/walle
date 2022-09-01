@@ -5,9 +5,13 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use walle_core::{
-    event::{DetailTypeDeclare, Event, ImplDeclare, PlatformDeclare, SubTypeDeclare, TypeDeclare},
+    event::{
+        BaseEvent, DetailTypeDeclare, Event, ImplDeclare, ParseEvent, PlatformDeclare,
+        SubTypeDeclare, TypeDeclare,
+    },
     prelude::WalleError,
     segment::IntoMessage,
+    util::GetSelf,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -28,8 +32,9 @@ impl core::ops::Add for Signal {
     }
 }
 
+#[async_trait]
 pub trait RawMatcherHandler {
-    fn call(
+    async fn call(
         &self,
         event: Event,
         config: &Arc<MatchersConfig>,
@@ -43,6 +48,7 @@ pub(crate) struct BoxedHandler<H, T, D, S, P, I>(
     pub std::marker::PhantomData<(T, D, S, P, I)>,
 );
 
+#[async_trait]
 impl<H, T, D, S, P, I> RawMatcherHandler for BoxedHandler<H, T, D, S, P, I>
 where
     H: MatcherHandler<T, D, S, P, I> + Send + 'static,
@@ -50,36 +56,37 @@ where
         + std::fmt::Debug
         + TypeDeclare
         + Send
+        + Sync
         + 'static,
     D: for<'a> TryFrom<&'a mut Event, Error = WalleError>
         + std::fmt::Debug
         + DetailTypeDeclare
         + Send
+        + Sync
         + 'static,
     S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
         + std::fmt::Debug
         + SubTypeDeclare
         + Send
+        + Sync
         + 'static,
-    I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + ImplDeclare
-        + Send
-        + 'static,
+    I: std::fmt::Debug + ImplDeclare + Send + Sync + 'static,
     P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
         + std::fmt::Debug
         + PlatformDeclare
         + Send
+        + Sync
         + 'static,
 {
-    fn call(
+    async fn call(
         &self,
         event: Event,
         config: &Arc<MatchersConfig>,
         caller: &Arc<dyn ActionCaller + Send + 'static>,
         temp: &TempMatchers,
     ) -> Signal {
-        match event.try_into() {
+        let implt = caller.get_impl(&event.get_self()).await;
+        match BaseEvent::<T, D, S, P, I>::parse(event, &implt) {
             Ok(event) => {
                 let mut session = Session::<T, D, S, P, I>::new(
                     event,
