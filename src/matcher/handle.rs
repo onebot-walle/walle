@@ -6,10 +6,10 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use async_trait::async_trait;
 use walle_core::{
     event::{
-        BaseEvent, DetailTypeDeclare, Event, ImplDeclare, ParseEvent, PlatformDeclare,
-        SubTypeDeclare, TypeDeclare,
+        BaseEvent, DetailTypeLevel, Event, ImplLevel, ParseEvent, PlatformLevel, SubTypeLevel,
+        TypeLevel,
     },
-    prelude::WalleError,
+    prelude::TryFromEvent,
     segment::IntoMessage,
     util::GetSelf,
 };
@@ -52,31 +52,11 @@ pub(crate) struct BoxedHandler<H, T, D, S, P, I>(
 impl<H, T, D, S, P, I> RawMatcherHandler for BoxedHandler<H, T, D, S, P, I>
 where
     H: MatcherHandler<T, D, S, P, I> + Send + 'static,
-    T: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + TypeDeclare
-        + Send
-        + Sync
-        + 'static,
-    D: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + DetailTypeDeclare
-        + Send
-        + Sync
-        + 'static,
-    S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + SubTypeDeclare
-        + Send
-        + Sync
-        + 'static,
-    I: std::fmt::Debug + ImplDeclare + Send + Sync + 'static,
-    P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + PlatformDeclare
-        + Send
-        + Sync
-        + 'static,
+    T: TryFromEvent<TypeLevel> + Send + Sync + 'static,
+    D: TryFromEvent<DetailTypeLevel> + Send + Sync + 'static,
+    S: TryFromEvent<SubTypeLevel> + Send + Sync + 'static,
+    I: TryFromEvent<ImplLevel> + Send + Sync + 'static,
+    P: TryFromEvent<PlatformLevel> + Send + Sync + 'static,
 {
     async fn call(
         &self,
@@ -155,36 +135,11 @@ pub trait MatcherHandlerExt<T = (), D = (), S = (), P = (), I = ()>:
     fn boxed(self) -> Matcher
     where
         Self: Send + Sync + Sized + 'static,
-        T: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + TypeDeclare
-            + Send
-            + Sync
-            + 'static,
-        D: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + DetailTypeDeclare
-            + Send
-            + Sync
-            + 'static,
-        S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + SubTypeDeclare
-            + Send
-            + Sync
-            + 'static,
-        P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + PlatformDeclare
-            + Send
-            + Sync
-            + 'static,
-        I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-            + std::fmt::Debug
-            + ImplDeclare
-            + Send
-            + Sync
-            + 'static,
+        T: TryFromEvent<TypeLevel> + Send + Sync + 'static,
+        D: TryFromEvent<DetailTypeLevel> + Send + Sync + 'static,
+        S: TryFromEvent<SubTypeLevel> + Send + Sync + 'static,
+        I: TryFromEvent<ImplLevel> + Send + Sync + 'static,
+        P: TryFromEvent<PlatformLevel> + Send + Sync + 'static,
     {
         Box::new(BoxedHandler(
             Arc::new(self),

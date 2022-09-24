@@ -5,7 +5,7 @@ use walle::{
 };
 use walle_core::{
     event::{Group, Message, MessageDeatilTypes},
-    prelude::MessageSegment,
+    prelude::MsgSegment,
     value_map,
 };
 
@@ -118,7 +118,7 @@ fn member_test() -> Matcher {
 fn forward_test_plugin() -> Matcher {
     handler_fn(|s: Session<Message, MessageDeatilTypes>| async move {
         s.send(vec![
-            MessageSegment {
+            MsgSegment {
                 ty: "node".to_string(),
                 data: value_map! {
                     "user_id": "80000000",
@@ -134,13 +134,13 @@ fn forward_test_plugin() -> Matcher {
                     ]
                 },
             },
-            // MessageSegment {
+            // MsgSegment {
             //     ty: "text".to_string(),
             //     data: value_map! {
             //         "text": "this segemnt will break the nodes"
             //     },
             // },
-            MessageSegment {
+            MsgSegment {
                 ty: "node".to_string(),
                 data: value_map! {
                     "user_id": "80000001",

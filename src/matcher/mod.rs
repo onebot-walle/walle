@@ -1,9 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use walle_core::{
-    action::{ActionDeclare, SendMessage},
-    event::{
-        Group, ImplDeclare, Message, MessageDeatilTypes, PlatformDeclare, Private, SubTypeDeclare,
-    },
+    action::{SendMessage, ToAction},
+    event::{Group, ImplLevel, Message, MessageDeatilTypes, PlatformLevel, Private, SubTypeLevel},
     prelude::*,
     structs::{Selft, SendMessageResp},
     util::GetSelf,
@@ -53,16 +51,16 @@ impl<T, D, S, P, I> Session<T, D, S, P, I> {
         }
     }
 
-    pub async fn call<A: ActionDeclare + Into<ValueMap>>(&self, action: A) -> WalleResult<Resp>
+    pub async fn call<A: ToAction + Into<ValueMap>>(&self, action: A) -> WalleResult<Resp>
     where
         T: GetSelf,
     {
         let action: Action = (action, self.event.ty.get_self()).into();
-        self.caller.call(action).await
+        self.caller.clone().call(action).await
     }
 
     pub async fn call_action(&self, action: Action) -> WalleResult<Resp> {
-        self.caller.call(action).await
+        self.caller.clone().call(action).await
     }
 }
 
@@ -126,24 +124,9 @@ impl<S, P, I> Session<Message, Group, S, P, I> {
 #[async_trait]
 impl<S, P, I> ReplyAbleSession for Session<Message, MessageDeatilTypes, S, P, I>
 where
-    S: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + SubTypeDeclare
-        + Send
-        + Sync
-        + 'static,
-    P: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + PlatformDeclare
-        + Send
-        + Sync
-        + 'static,
-    I: for<'a> TryFrom<&'a mut Event, Error = WalleError>
-        + std::fmt::Debug
-        + ImplDeclare
-        + Send
-        + Sync
-        + 'static,
+    S: TryFromEvent<SubTypeLevel> + Send + Sync + 'static,
+    P: TryFromEvent<PlatformLevel> + Send + Sync + 'static,
+    I: TryFromEvent<ImplLevel> + Send + Sync + 'static,
 {
     async fn send<M: IntoMessage + Send + 'static>(
         &self,
@@ -204,15 +187,15 @@ pub struct Bot {
 }
 
 impl Bot {
-    pub async fn call<T: ActionDeclare + Into<ValueMap>>(&self, action: T) -> WalleResult<Resp> {
+    pub async fn call<T: ToAction + Into<ValueMap>>(&self, action: T) -> WalleResult<Resp> {
         let action = (action, self.selft.clone()).into();
-        self.caller.call(action).await
+        self.caller.clone().call(action).await
     }
 }
 
 #[async_trait]
 pub trait ActionCaller: GetSelfs + Sync {
-    async fn call(&self, action: Action) -> WalleResult<Resp>;
+    async fn call(self: Arc<Self>, action: Action) -> WalleResult<Resp>;
     async fn get_bots(self: Arc<Self>) -> Vec<Bot>;
 }
 
@@ -222,7 +205,7 @@ where
     AH: ActionHandler<Event, Action, Resp> + Send + Sync + 'static,
     EH: EventHandler<Event, Action, Resp> + Send + Sync + 'static,
 {
-    async fn call(&self, action: Action) -> WalleResult<Resp> {
+    async fn call(self: Arc<Self>, action: Action) -> WalleResult<Resp> {
         self.handle_action(action).await
     }
 
@@ -239,15 +222,14 @@ where
 }
 
 impl ActionCaller for Bot {
-    fn call<'a, 't>(
-        &'a self,
+    fn call<'t>(
+        self: Arc<Self>,
         action: Action,
     ) -> Pin<Box<dyn Future<Output = WalleResult<Resp>> + Send + 't>>
     where
-        'a: 't,
         Self: 't,
     {
-        self.caller.call(action)
+        self.caller.clone().call(action)
     }
     fn get_bots<'t>(self: Arc<Self>) -> Pin<Box<dyn Future<Output = Vec<Bot>> + Send + 't>>
     where
@@ -261,9 +243,7 @@ impl GetSelfs for Bot {
     fn get_impl<'life0, 'life1, 'async_trait>(
         &'life0 self,
         selft: &'life1 Selft,
-    ) -> core::pin::Pin<
-        Box<dyn core::future::Future<Output = String> + core::marker::Send + 'async_trait>,
-    >
+    ) -> core::pin::Pin<Box<dyn core::future::Future<Output = String> + Send + 'async_trait>>
     where
         'life0: 'async_trait,
         'life1: 'async_trait,
@@ -273,9 +253,7 @@ impl GetSelfs for Bot {
     }
     fn get_selfs<'life0, 'async_trait>(
         &'life0 self,
-    ) -> core::pin::Pin<
-        Box<dyn core::future::Future<Output = Vec<Selft>> + core::marker::Send + 'async_trait>,
-    >
+    ) -> core::pin::Pin<Box<dyn core::future::Future<Output = Vec<Selft>> + Send + 'async_trait>>
     where
         'life0: 'async_trait,
         Self: 'async_trait,

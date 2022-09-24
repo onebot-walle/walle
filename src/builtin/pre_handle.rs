@@ -1,11 +1,11 @@
 use crate::{pre_handle_fn, PreHandler, Session, Signal};
 use walle_core::{
     event::{BaseEvent, Message},
-    prelude::MessageSegment,
+    prelude::MsgSegment,
     util::Value,
 };
 
-fn text_mut(seg: &mut MessageSegment) -> Option<&mut String> {
+fn text_mut(seg: &mut MsgSegment) -> Option<&mut String> {
     if seg.ty.as_str() == "text" {
         seg.data.get_mut("text").and_then(|v| v.as_str_mut())
     } else {

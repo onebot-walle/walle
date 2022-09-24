@@ -75,7 +75,11 @@ impl EventHandler<Event, Action, Resp> for Matchers {
         }
         Ok(vec![])
     }
-    async fn call(&self, event: Event) -> WalleResult<()> {
+    async fn call<AH, EH>(&self, event: Event, _: &Arc<OneBot<AH, EH>>) -> WalleResult<()>
+    where
+        AH: ActionHandler<Event, Action, Resp> + Send + Sync + 'static,
+        EH: EventHandler<Event, Action, Resp> + Send + Sync + 'static,
+    {
         use walle_core::alt::ColoredAlt;
         if event.ty.as_str() != "meta" {
             info!(target: "Walle", "{}", event.colored_alt());

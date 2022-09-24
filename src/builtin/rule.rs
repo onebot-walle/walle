@@ -1,6 +1,6 @@
 use crate::Signal;
 use crate::{rule_fn, Rule, Session};
-use walle_core::event::{DetailTypeDeclare, Group, Message, MessageDeatilTypes};
+use walle_core::event::{Group, Message, MessageDeatilTypes};
 
 pub struct UserIdChecker {
     pub user_id: String,
@@ -90,15 +90,15 @@ pub fn mention_me_rule<D, S, P, I>() -> impl Rule<Message, D, S, P, I> {
     rule_fn(_mention_me)
 }
 
-pub fn to_me_rule<D: DetailTypeDeclare, S, P, I>() -> impl Rule<Message, D, S, P, I> {
-    rule_fn(|session: &Session<Message, D, S, P, I>| {
-        if session.event.detail_type.detail_type() == "private" {
-            Signal::Matched
-        } else {
-            _mention_me(session)
-        }
-    })
-}
+// pub fn to_me_rule<D: DetailTypeDeclare, S, P, I>() -> impl Rule<Message, D, S, P, I> {
+//     rule_fn(|session: &Session<Message, D, S, P, I>| {
+//         if session.event.detail_type.detail_type() == "private" {
+//             Signal::Matched
+//         } else {
+//             _mention_me(session)
+//         }
+//     })
+// }
 
 pub fn allways_matched<T, D, S, P, I>() -> impl Rule<T, D, S, P, I> {
     rule_fn(|_session| Signal::Matched)
