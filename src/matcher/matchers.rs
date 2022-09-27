@@ -67,7 +67,7 @@ impl EventHandler<Event, Action, Resp> for Matchers {
         AH: ActionHandler<Event, Action, Resp> + Send + Sync + 'static,
         EH: EventHandler<Event, Action, Resp> + Send + Sync + 'static,
     {
-        *self.ob.write().await = Some(ob.clone());
+        *self.ob.write().await = Some(Arc::new(ob.clone()));
         *self.config.write().await = Arc::new(config);
         let ob = self.ob.read().await.clone().unwrap();
         for hook in self.hooks.iter() {

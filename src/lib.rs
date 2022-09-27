@@ -5,11 +5,15 @@ use walle_core::{action::Action, obc::AppOBC, resp::Resp, OneBot};
 pub mod matcher;
 // #[cfg(feature = "scheduler")]
 // mod scheduler;
+mod bot;
+mod caller;
 mod utils;
 
 // pub mod builtin;
 pub mod config;
 
+pub use bot::Bot;
+pub use caller::{ActionCaller, ActionCallerExt};
 pub use config::*;
 pub use matcher::*;
 pub use walle_core;

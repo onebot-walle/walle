@@ -1,7 +1,7 @@
 use tracing::info;
 use walle::{
-    builtin::strip_prefix, handler_fn, new_walle, AppConfig, Matcher, MatcherHandlerExt, Matchers,
-    MatchersConfig, PreHandler, ReplyAbleSession, Session,
+    builtin::strip_prefix, handler_fn, new_walle, ActionCaller, AppConfig, Matcher,
+    MatcherHandlerExt, Matchers, MatchersConfig, PreHandler, ReplyAbleSession, Session,
 };
 use walle_core::{
     event::{Group, Message, MessageDeatilTypes},
@@ -14,6 +14,7 @@ async fn main() {
     let matchers = Matchers::default()
         .add_matcher(recall_test_plugin())
         .add_matcher(mute_test())
+        .add_matcher(unmute_test())
         .add_matcher(member_test())
         .add_matcher(forward_test_plugin());
     let walle = new_walle(matchers);
@@ -33,9 +34,12 @@ fn recall_test_plugin() -> Matcher {
                 info!(target: "api_test", "start api test");
                 if let Ok(m) = s.send("hello world").await {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    s.call(walle_core::action::DeleteMessage {
-                        message_id: m.message_id,
-                    })
+                    s.call_action(
+                        walle_core::action::DeleteMessage {
+                            message_id: m.message_id,
+                        }
+                        .into(),
+                    )
                     .await
                     .ok();
                 }
@@ -58,6 +62,29 @@ fn mute_test() -> Matcher {
                             "group_id": s.event.detail_type.group_id,
                             "user_id": mention.user_id,
                             "duration": 60
+                        },
+                    })
+                    .await;
+                println!("{:?}", r);
+            }
+        }))
+        .boxed()
+}
+
+fn unmute_test() -> Matcher {
+    strip_prefix("./unmute")
+        .layer(handler_fn(|s: Session<Message, Group>| async move {
+            use walle_core::segment::MessageExt;
+            let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
+            for mention in mentions {
+                let r = s
+                    .call_action(walle_core::action::Action {
+                        action: "ban_group_member".to_string(),
+                        selft: Some(s.event.ty.selft.clone()),
+                        params: value_map! {
+                            "group_id": s.event.detail_type.group_id,
+                            "user_id": mention.user_id,
+                            "duration": 0
                         },
                     })
                     .await;
