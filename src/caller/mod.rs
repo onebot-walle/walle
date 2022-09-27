@@ -142,7 +142,8 @@ pub trait ActionCallerExt: ActionCaller {
     {
         self.call_action(action.to_action())
             .await?
-            .as_result()?
+            .as_result()
+            .map_err(WalleError::RespError)?
             .try_into()
     }
 }

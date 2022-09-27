@@ -25,7 +25,7 @@ serde = { version = "1.0", features = ["derive"] }
 dashmap = "5.3"
 
 [dependencies.walle-core]
-version = "0.7.0-a3"
+version = "0.7.0-a6"
 # git = "https://github.com/abrahum/walle-core.git"
 features = ["websocket", "app-obc", "http", "alt"]
 
