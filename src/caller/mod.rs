@@ -115,7 +115,7 @@ impl ActionCaller for Session
         'a: 't,
         Self: 't,
     {
-        action.selft = self.event.selft();
+        action.selft = self.selft.clone();
         self.caller.call_action(action)
     }
     fn get_bots<'a, 't>(&'a self) -> Pin<Box<dyn Future<Output = Vec<Bot>> + Send + 't>>

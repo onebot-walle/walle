@@ -1,14 +1,21 @@
 use tracing::info;
 use walle::{
-    matcher, new_walle, on_command, ActionCallerExt, AppConfig, MatcherHandler, Matchers,
-    MatchersConfig, Session,
+    matcher, new_walle, on_command, ActionCaller, ActionCallerExt, AppConfig, MatcherHandler,
+    Matchers, MatchersConfig, Session,
+};
+use walle_core::{
+    event::GroupMessageEvent,
+    prelude::Action,
+    segment::{Mention, MessageExt},
+    value_map,
 };
 
 #[tokio::main]
 async fn main() {
-    let matchers = Matchers::default().add_matcher(recall_test_plugin().boxed());
-    // .add_matcher(mute_test())
-    // .add_matcher(unmute_test())
+    let matchers = Matchers::default()
+        .add_matcher(recall_test_plugin().boxed())
+        .add_matcher(mute_test().boxed())
+        .add_matcher(unmute_test().boxed());
     // .add_matcher(member_test())
     // .add_matcher(forward_test_plugin());
     let walle = new_walle(matchers);
@@ -21,11 +28,10 @@ async fn main() {
     }
 }
 
-on_command!(Recall, "./recall");
-
 fn recall_test_plugin() -> impl MatcherHandler {
+    on_command!(Recall, "./recall");
     matcher(|Recall(_): Recall, s: Session| async move {
-        info!(target: "api_test", "start api test");
+        info!(target: "api_test", "recall test");
         if let Ok(m) = s.reply("hello world").await {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             s.delete_message(m.message_id).await.ok();
@@ -33,51 +39,46 @@ fn recall_test_plugin() -> impl MatcherHandler {
     })
 }
 
-// fn mute_test() -> Matcher {
-//     strip_prefix("./mute")
-//         .layer(handler_fn(|s: Session<Message, Group>| async move {
-//             use walle_core::segment::MessageExt;
-//             let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
-//             for mention in mentions {
-//                 let r = s
-//                     .call_action(walle_core::action::Action {
-//                         action: "ban_group_member".to_string(),
-//                         selft: Some(s.event.ty.selft.clone()),
-//                         params: value_map! {
-//                             "group_id": s.event.detail_type.group_id,
-//                             "user_id": mention.user_id,
-//                             "duration": 60
-//                         },
-//                     })
-//                     .await;
-//                 println!("{:?}", r);
-//             }
-//         }))
-//         .boxed()
-// }
+fn mute_test() -> impl MatcherHandler {
+    on_command!(Mute, "./mute");
+    matcher(
+        |Mute(segs): Mute, event: GroupMessageEvent, s: Session| async move {
+            for seg in segs.extract::<Mention>() {
+                s.call_action(Action {
+                    action: "ban_group_member".to_string(),
+                    params: value_map! {
+                        "group_id": event.detail_type.group_id,
+                        "user_id": seg.user_id,
+                        "duration": 60,
+                    },
+                    selft: None,
+                })
+                .await
+                .ok();
+            }
+        },
+    )
+}
 
-// fn unmute_test() -> Matcher {
-//     strip_prefix("./unmute")
-//         .layer(handler_fn(|s: Session<Message, Group>| async move {
-//             use walle_core::segment::MessageExt;
-//             let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
-//             for mention in mentions {
-//                 let r = s
-//                     .call_action(walle_core::action::Action {
-//                         action: "ban_group_member".to_string(),
-//                         selft: Some(s.event.ty.selft.clone()),
-//                         params: value_map! {
-//                             "group_id": s.event.detail_type.group_id,
-//                             "user_id": mention.user_id,
-//                             "duration": 0
-//                         },
-//                     })
-//                     .await;
-//                 println!("{:?}", r);
-//             }
-//         }))
-//         .boxed()
-// }
+fn unmute_test() -> impl MatcherHandler {
+    on_command!(Unmute, "./unmute");
+    matcher(
+        |Unmute(segs): Unmute, event: GroupMessageEvent, s: Session| async move {
+            for seg in segs.extract::<Mention>() {
+                s.call_action(Action {
+                    action: "unban_group_member".to_string(),
+                    params: value_map! {
+                        "group_id": event.detail_type.group_id,
+                        "user_id": seg.user_id,
+                    },
+                    selft: None,
+                })
+                .await
+                .ok();
+            }
+        },
+    )
+}
 
 // fn member_test() -> Matcher {
 //     strip_prefix("./get_no_member")

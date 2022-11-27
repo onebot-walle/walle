@@ -8,7 +8,7 @@ use walle_core::{
     },
     prelude::{async_trait, Event},
     segment::{IntoMessage, MsgSegment, Segments},
-    structs::SendMessageResp,
+    structs::{Selft, SendMessageResp},
     util::{Value, ValueMap, ValueMapExt},
     WalleError, WalleResult,
 };
@@ -21,6 +21,7 @@ pub struct Session {
     pub caller: Arc<dyn ActionCaller + Send + 'static>,
     reply_sign: ReplySign,
     temps: TempMatchers,
+    pub(crate) selft: Option<Selft>,
 }
 
 impl Session {
@@ -32,6 +33,7 @@ impl Session {
     ) -> Self {
         let reply_sign = ReplySign::new(&event);
         Self {
+            selft: event.selft(),
             event,
             config,
             caller,
@@ -210,5 +212,12 @@ impl FromSession for Session {
         Self: 'async_trait,
     {
         Box::pin(async move { Ok(session) })
+    }
+}
+
+#[async_trait]
+impl<T: FromSessionPart> FromSession for T {
+    async fn from_session(mut session: Session) -> WalleResult<Self> {
+        Self::from_session_part(&mut session).await
     }
 }
