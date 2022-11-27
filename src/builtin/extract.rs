@@ -23,14 +23,13 @@ mod test {
                     } else {
                         segs.remove(0);
                     }
+                    return Ok(Self(segs));
                 }
-                return Ok(Self(segs));
-            } else {
-                Err(walle_core::WalleError::Other(format!(
-                    "Command not match with {}",
-                    "command"
-                )))
             }
+            Err(walle_core::WalleError::Other(format!(
+                "Command not match with {}",
+                "command"
+            )))
         }
     }
 }
@@ -67,14 +66,13 @@ macro_rules! on_command {
                         } else {
                             segs.remove(0);
                         }
+                        return Ok(Self(segs));
                     }
-                    return Ok(Self(segs));
-                } else {
-                    Err(walle_core::WalleError::Other(format!(
-                        "Command not match with {}",
-                        $command
-                    )))
                 }
+                Err(walle_core::WalleError::Other(format!(
+                    "Command not match with {}",
+                    $command
+                )))
             }
         }
     };

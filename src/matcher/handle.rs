@@ -6,10 +6,11 @@ use std::future::Future;
 use async_trait::async_trait;
 use walle_core::WalleResult;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub enum Signal {
     MatchAndBlock,
     Matched,
+    #[default]
     NotMatch,
 }
 
@@ -76,7 +77,7 @@ where
 impl<F, Fut> _MatcherHandler<()> for F
 where
     F: Fn() -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = ()> + Send,
+    Fut: Future<Output = ()> + Send + 'static,
 {
     fn _handle<'a, 't>(
         &'a self,
@@ -87,7 +88,7 @@ where
         Self: 't,
     {
         Box::pin(async move {
-            self().await;
+            tokio::spawn(self());
             Signal::Matched
         })
     }
@@ -96,7 +97,7 @@ where
 impl<F, T, Fut> _MatcherHandler<T> for F
 where
     F: Fn(T) -> Fut + Send + Sync + 'static,
-    Fut: Future<Output = ()> + Send,
+    Fut: Future<Output = ()> + Send + 'static,
     T: FromSession + Send,
 {
     fn _handle<'a, 't>(
@@ -115,7 +116,7 @@ where
                     return Signal::NotMatch;
                 }
             };
-            self(t).await;
+            tokio::spawn(self(t));
             Signal::Matched
         })
     }
@@ -127,7 +128,7 @@ macro_rules! impl_matcher_handler {
         impl<F, $($ty,)* T, Fut> _MatcherHandler<($($ty,)* T)> for F
         where
             F: Fn($($ty,)* T) -> Fut + Send + Sync + 'static,
-            Fut: Future<Output = ()> + Send,
+            Fut: Future<Output = ()> + Send + 'static,
             $($ty: FromSessionPart + Send,)*
             T: FromSession + Send,
         {
@@ -154,7 +155,7 @@ macro_rules! impl_matcher_handler {
                             return Signal::NotMatch;
                         }
                     };
-                    self($($ty,)* t).await;
+                    tokio::spawn(self($($ty,)* t));
                     Signal::Matched
                 })
             }
