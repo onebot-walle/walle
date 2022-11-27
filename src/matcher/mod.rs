@@ -1,4 +1,4 @@
-use walle_core::{event::BaseEvent, prelude::async_trait};
+use walle_core::prelude::{async_trait, Event};
 
 mod handle;
 mod hook;
@@ -14,20 +14,14 @@ pub use pre_handle::*;
 pub use rule::*;
 pub use session::*;
 
-struct TempMatcher<T, D, S, P, I> {
-    pub tx: tokio::sync::mpsc::UnboundedSender<BaseEvent<T, D, S, P, I>>,
+struct TempMatcher {
+    pub tx: tokio::sync::mpsc::UnboundedSender<Event>,
 }
 
 #[async_trait]
-impl<T, D, S, P, I> MatcherHandler<T, D, S, P, I> for TempMatcher<T, D, S, P, I>
-where
-    T: Send + 'static,
-    D: Send + 'static,
-    S: Send + 'static,
-    P: Send + 'static,
-    I: Send + 'static,
-{
-    async fn handle(&self, session: Session<T, D, S, P, I>) {
+impl MatcherHandler for TempMatcher {
+    async fn handle(&self, session: Session) -> Signal {
         self.tx.send(session.event).ok();
+        Signal::MatchAndBlock
     }
 }

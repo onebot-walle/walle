@@ -1,4 +1,4 @@
-use walle::{builtin::echo, new_walle, MatcherHandlerExt, Matchers, MatchersConfig};
+use walle::{builtin::echo, new_walle, MatcherHandler, Matchers, MatchersConfig};
 use walle_core::config::AppConfig;
 
 #[tokio::main]

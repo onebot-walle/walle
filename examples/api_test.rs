@@ -1,22 +1,16 @@
 use tracing::info;
 use walle::{
-    builtin::strip_prefix, handler_fn, new_walle, ActionCaller, AppConfig, Matcher,
-    MatcherHandlerExt, Matchers, MatchersConfig, PreHandler, ReplyAbleSession, Session,
-};
-use walle_core::{
-    event::{Group, Message, MessageDeatilTypes},
-    prelude::MsgSegment,
-    value_map,
+    matcher, new_walle, on_command, ActionCallerExt, AppConfig, MatcherHandler, Matchers,
+    MatchersConfig, Session,
 };
 
 #[tokio::main]
 async fn main() {
-    let matchers = Matchers::default()
-        .add_matcher(recall_test_plugin())
-        .add_matcher(mute_test())
-        .add_matcher(unmute_test())
-        .add_matcher(member_test())
-        .add_matcher(forward_test_plugin());
+    let matchers = Matchers::default().add_matcher(recall_test_plugin().boxed());
+    // .add_matcher(mute_test())
+    // .add_matcher(unmute_test())
+    // .add_matcher(member_test())
+    // .add_matcher(forward_test_plugin());
     let walle = new_walle(matchers);
     let joins = walle
         .start(AppConfig::default(), MatchersConfig::default(), true)
@@ -27,90 +21,81 @@ async fn main() {
     }
 }
 
-fn recall_test_plugin() -> Matcher {
-    strip_prefix("./recall")
-        .layer(handler_fn(
-            |s: Session<Message, MessageDeatilTypes>| async move {
-                info!(target: "api_test", "start api test");
-                if let Ok(m) = s.send("hello world").await {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    s.call_action(
-                        walle_core::action::DeleteMessage {
-                            message_id: m.message_id,
-                        }
-                        .into(),
-                    )
-                    .await
-                    .ok();
-                }
-            },
-        ))
-        .boxed()
+on_command!(Recall, "./recall");
+
+fn recall_test_plugin() -> impl MatcherHandler {
+    matcher(|Recall(_): Recall, s: Session| async move {
+        info!(target: "api_test", "start api test");
+        if let Ok(m) = s.reply("hello world").await {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            s.delete_message(m.message_id).await.ok();
+        }
+    })
 }
 
-fn mute_test() -> Matcher {
-    strip_prefix("./mute")
-        .layer(handler_fn(|s: Session<Message, Group>| async move {
-            use walle_core::segment::MessageExt;
-            let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
-            for mention in mentions {
-                let r = s
-                    .call_action(walle_core::action::Action {
-                        action: "ban_group_member".to_string(),
-                        selft: Some(s.event.ty.selft.clone()),
-                        params: value_map! {
-                            "group_id": s.event.detail_type.group_id,
-                            "user_id": mention.user_id,
-                            "duration": 60
-                        },
-                    })
-                    .await;
-                println!("{:?}", r);
-            }
-        }))
-        .boxed()
-}
+// fn mute_test() -> Matcher {
+//     strip_prefix("./mute")
+//         .layer(handler_fn(|s: Session<Message, Group>| async move {
+//             use walle_core::segment::MessageExt;
+//             let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
+//             for mention in mentions {
+//                 let r = s
+//                     .call_action(walle_core::action::Action {
+//                         action: "ban_group_member".to_string(),
+//                         selft: Some(s.event.ty.selft.clone()),
+//                         params: value_map! {
+//                             "group_id": s.event.detail_type.group_id,
+//                             "user_id": mention.user_id,
+//                             "duration": 60
+//                         },
+//                     })
+//                     .await;
+//                 println!("{:?}", r);
+//             }
+//         }))
+//         .boxed()
+// }
 
-fn unmute_test() -> Matcher {
-    strip_prefix("./unmute")
-        .layer(handler_fn(|s: Session<Message, Group>| async move {
-            use walle_core::segment::MessageExt;
-            let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
-            for mention in mentions {
-                let r = s
-                    .call_action(walle_core::action::Action {
-                        action: "ban_group_member".to_string(),
-                        selft: Some(s.event.ty.selft.clone()),
-                        params: value_map! {
-                            "group_id": s.event.detail_type.group_id,
-                            "user_id": mention.user_id,
-                            "duration": 0
-                        },
-                    })
-                    .await;
-                println!("{:?}", r);
-            }
-        }))
-        .boxed()
-}
+// fn unmute_test() -> Matcher {
+//     strip_prefix("./unmute")
+//         .layer(handler_fn(|s: Session<Message, Group>| async move {
+//             use walle_core::segment::MessageExt;
+//             let mentions: Vec<walle_core::segment::Mention> = s.event.ty.message.clone().extract();
+//             for mention in mentions {
+//                 let r = s
+//                     .call_action(walle_core::action::Action {
+//                         action: "ban_group_member".to_string(),
+//                         selft: Some(s.event.ty.selft.clone()),
+//                         params: value_map! {
+//                             "group_id": s.event.detail_type.group_id,
+//                             "user_id": mention.user_id,
+//                             "duration": 0
+//                         },
+//                     })
+//                     .await;
+//                 println!("{:?}", r);
+//             }
+//         }))
+//         .boxed()
+// }
 
-fn member_test() -> Matcher {
-    strip_prefix("./get_no_member")
-        .layer(handler_fn(|s: Session<Message, Group>| async move {
-            let r = s
-                .call_action(walle_core::action::Action {
-                    action: "get_group_member_info".to_string(),
-                    selft: Some(s.event.ty.selft.clone()),
-                    params: value_map! {
-                        "group_id": s.event.detail_type.group_id,
-                        "user_id": "80000001"
-                    },
-                })
-                .await;
-            println!("{:?}", r);
-        }))
-        .boxed()
-}
+// fn member_test() -> Matcher {
+//     strip_prefix("./get_no_member")
+//         .layer(handler_fn(|s: Session<Message, Group>| async move {
+//             let r = s
+//                 .call_action(walle_core::action::Action {
+//                     action: "get_group_member_info".to_string(),
+//                     selft: Some(s.event.ty.selft.clone()),
+//                     params: value_map! {
+//                         "group_id": s.event.detail_type.group_id,
+//                         "user_id": "80000001"
+//                     },
+//                 })
+//                 .await;
+//             println!("{:?}", r);
+//         }))
+//         .boxed()
+// }
 
 // #[allow(dead_code)]
 // fn flash_test_plugin() -> Matcher {
@@ -142,64 +127,64 @@ fn member_test() -> Matcher {
 //     .boxed()
 // }
 
-fn forward_test_plugin() -> Matcher {
-    handler_fn(|s: Session<Message, MessageDeatilTypes>| async move {
-        s.send(vec![
-            MsgSegment {
-                ty: "node".to_string(),
-                data: value_map! {
-                    "user_id": "80000000",
-                    "time": 1654654105527.0,
-                    "user_name": "mht",
-                    "message": [
-                        {
-                            "type": "text",
-                            "data": {
-                                "text": "hello world"
-                            }
-                        }
-                    ]
-                },
-            },
-            // MsgSegment {
-            //     ty: "text".to_string(),
-            //     data: value_map! {
-            //         "text": "this segemnt will break the nodes"
-            //     },
-            // },
-            MsgSegment {
-                ty: "node".to_string(),
-                data: value_map! {
-                    "user_id": "80000001",
-                    "time": 1654654190000.0,
-                    "user_name": "mht2",
-                    "message": [
-                        {
-                            "type": "node",
-                            "data": {
-                                "user_id": "80000000",
-                                "time": 1654654105527.0,
-                                "user_name": "mht",
-                                "message": [
-                                    {
-                                        "type": "text",
-                                        "data": {
-                                            "text": "hello world"
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    ]
-                },
-            },
-        ])
-        .await
-        .unwrap();
-    })
-    .with_pre_handler(strip_prefix("./forward"))
-    .boxed()
-}
+// fn forward_test_plugin() -> Matcher {
+//     handler_fn(|s: Session<Message, MessageDeatilTypes>| async move {
+//         s.send(vec![
+//             MsgSegment {
+//                 ty: "node".to_string(),
+//                 data: value_map! {
+//                     "user_id": "80000000",
+//                     "time": 1654654105527.0,
+//                     "user_name": "mht",
+//                     "message": [
+//                         {
+//                             "type": "text",
+//                             "data": {
+//                                 "text": "hello world"
+//                             }
+//                         }
+//                     ]
+//                 },
+//             },
+//             // MsgSegment {
+//             //     ty: "text".to_string(),
+//             //     data: value_map! {
+//             //         "text": "this segemnt will break the nodes"
+//             //     },
+//             // },
+//             MsgSegment {
+//                 ty: "node".to_string(),
+//                 data: value_map! {
+//                     "user_id": "80000001",
+//                     "time": 1654654190000.0,
+//                     "user_name": "mht2",
+//                     "message": [
+//                         {
+//                             "type": "node",
+//                             "data": {
+//                                 "user_id": "80000000",
+//                                 "time": 1654654105527.0,
+//                                 "user_name": "mht",
+//                                 "message": [
+//                                     {
+//                                         "type": "text",
+//                                         "data": {
+//                                             "text": "hello world"
+//                                         }
+//                                     }
+//                                 ]
+//                             }
+//                         }
+//                     ]
+//                 },
+//             },
+//         ])
+//         .await
+//         .unwrap();
+//     })
+//     .with_pre_handler(strip_prefix("./forward"))
+//     .boxed()
+// }
 
 // fn url_image_plugin() -> MessageMatcher {
 //     handler_fn(|s| async move {

@@ -5,7 +5,7 @@ use walle_core::{
     prelude::{async_trait, GetSelfs},
     resp::Resp,
     structs::Selft,
-    util::{GetSelf, Value},
+    util::Value,
     ActionHandler, EventHandler, OneBot, WalleError, WalleResult,
 };
 
@@ -82,7 +82,7 @@ impl ActionCaller for Bot {
     }
 }
 
-impl<T, D, S, P, I> GetSelfs for Session<T, D, S, P, I> {
+impl GetSelfs for Session {
     fn get_impl<'life0, 'life1, 'async_trait>(
         &'life0 self,
         selft: &'life1 Selft,
@@ -105,13 +105,7 @@ impl<T, D, S, P, I> GetSelfs for Session<T, D, S, P, I> {
     }
 }
 
-impl<T, D, S, P, I> ActionCaller for Session<T, D, S, P, I>
-where
-    T: GetSelf + Sync,
-    D: Sync,
-    S: Sync,
-    P: Sync,
-    I: Sync,
+impl ActionCaller for Session
 {
     fn call_action<'a, 't>(
         &'a self,
@@ -121,7 +115,7 @@ where
         'a: 't,
         Self: 't,
     {
-        action.selft = Some(self.event.ty.get_self());
+        action.selft = self.event.selft();
         self.caller.call_action(action)
     }
     fn get_bots<'a, 't>(&'a self) -> Pin<Box<dyn Future<Output = Vec<Bot>> + Send + 't>>
@@ -135,7 +129,7 @@ where
 
 macro_rules! action_ext {
     ($fname: ident, $aty: expr => $rty: ty) => {
-        fn $fname<'a, 't>(&'a self) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + 't>>
+        fn $fname<'a, 't>(&'a self) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + Send + 't>>
         where
             'a: 't,
             Self: 't,
@@ -148,7 +142,7 @@ macro_rules! action_ext {
         }
     };
     ($fname: ident, $a: expr => $rty: ty, $($f: ident: $fty: ty),*) => {
-        fn $fname<'a, 't>(&'a self, $($f: $fty),*) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + 't>>
+        fn $fname<'a, 't>(&'a self, $($f: $fty),*) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + Send + 't>>
         where
             'a: 't,
             Self: 't,
@@ -175,7 +169,7 @@ pub trait ActionCallerExt: ActionCaller {
         &'a self,
         limit: i64,
         timeout: i64,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + 't>>
+    ) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + Send + 't>>
     where
         'a: 't,
         Self: 't,
@@ -193,7 +187,7 @@ pub trait ActionCallerExt: ActionCaller {
         guild_id: Option<String>,
         channel_id: Option<String>,
         message: M,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + 't>>
+    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + Send + 't>>
     where
         'a: 't,
         Self: 't,
@@ -212,7 +206,7 @@ pub trait ActionCallerExt: ActionCaller {
         &'a self,
         user_id: String,
         message: M,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + 't>>
+    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + Send + 't>>
     where
         'a: 't,
         Self: 't,
@@ -231,7 +225,7 @@ pub trait ActionCallerExt: ActionCaller {
         &'a self,
         group_id: String,
         message: M,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + 't>>
+    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + Send + 't>>
     where
         'a: 't,
         Self: 't,
@@ -251,7 +245,7 @@ pub trait ActionCallerExt: ActionCaller {
         guild_id: String,
         channel_id: String,
         message: M,
-    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + 't>>
+    ) -> Pin<Box<dyn Future<Output = WalleResult<walle_core::structs::SendMessageResp>> + Send + 't>>
     where
         'a: 't,
         Self: 't,
@@ -359,9 +353,10 @@ pub trait ActionCallerExt: ActionCaller {
     );
     action_ext!(
         get_channel_list,
-        walle_core::action::GetChannelList { guild_id } => 
+        walle_core::action::GetChannelList { guild_id, joined_only } => 
         Vec<walle_core::structs::ChannelInfo>,
-        guild_id: String
+        guild_id: String,
+        joined_only: bool
     );
     action_ext!(
         set_channel_name,

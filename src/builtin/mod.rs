@@ -1,9 +1,9 @@
 mod echo;
-mod matcher;
+mod extract;
 mod pre_handle;
 mod rule;
 
 pub use echo::*;
-pub use matcher::*;
+pub use extract::*;
 pub use pre_handle::*;
 pub use rule::*;

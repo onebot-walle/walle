@@ -1,5 +1,5 @@
-use super::RawMatcherHandler;
-use crate::{ActionCaller, Signal};
+use super::MatcherHandler;
+use crate::{ActionCaller, Session, Signal};
 use crate::{MatchersConfig, MatchersHook};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ use walle_core::{
     OneBot,
 };
 
-pub type Matcher = Box<dyn RawMatcherHandler + Send + Sync + 'static>;
+pub type Matcher = Box<dyn MatcherHandler + Send + Sync + 'static>;
 pub type TempMatchers = Arc<Mutex<HashMap<String, Matcher>>>;
 
 #[derive(Default)]
@@ -41,7 +41,13 @@ impl Matchers {
         let mut matched_temp_key: Option<String> = None;
         let mut temps = self.temps.lock().await;
         for temp in temps.iter() {
-            if temp.1.call(event.clone(), &config, ob, &self.temps).await != Signal::NotMatch {
+            let session = Session::new(
+                event.clone(),
+                ob.clone(),
+                config.clone(),
+                self.temps.clone(),
+            );
+            if temp.1.handle(session).await != Signal::NotMatch {
                 matched_temp_key = Some(temp.0.to_owned());
                 break;
             }
@@ -81,9 +87,10 @@ impl EventHandler<Event, Action, Resp> for Matchers {
         EH: EventHandler<Event, Action, Resp> + Send + Sync + 'static,
     {
         use walle_core::alt::ColoredAlt;
-        if event.ty.as_str() != "meta" {
-            info!(target: "Walle", "{}", event.colored_alt());
+        if event.ty.as_str() == "meta" {
+            return Ok(());
         }
+        info!(target: "Walle", "{}", event.colored_alt());
         let ob: Arc<dyn ActionCaller + Send + 'static> =
             self.ob.read().await.clone().ok_or(WalleError::NotStarted)?;
         let config = self.config.read().await.clone();
@@ -91,8 +98,13 @@ impl EventHandler<Event, Action, Resp> for Matchers {
             return Ok(());
         }
         for matcher in &self.inner {
-            if matcher.call(event.clone(), &config, &ob, &self.temps).await == Signal::MatchAndBlock
-            {
+            let session = Session::new(
+                event.clone(),
+                ob.clone(),
+                config.clone(),
+                self.temps.clone(),
+            );
+            if matcher.handle(session).await == Signal::MatchAndBlock {
                 return Ok(());
             }
         }

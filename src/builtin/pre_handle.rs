@@ -1,36 +1,67 @@
 use crate::{pre_handle_fn, PreHandler, Session, Signal};
 use walle_core::{
-    event::{BaseEvent, Message},
-    prelude::MsgSegment,
-    util::Value,
+    prelude::Event,
+    segment::MsgSegmentMut,
+    util::{Value, ValueMapExt},
 };
 
-fn text_mut(seg: &mut MsgSegment) -> Option<&mut String> {
-    if seg.ty.as_str() == "text" {
-        seg.data.get_mut("text").and_then(|v| v.as_str_mut())
+fn seg_mut_iter<'a>(vec_value: &'a mut Vec<Value>) -> impl Iterator<Item = MsgSegmentMut<'a>> {
+    vec_value.into_iter().filter_map(|v| {
+        if let Ok(seg) = v.try_as_mut() {
+            Some(seg)
+        } else {
+            None
+        }
+    })
+}
+
+// fn seg_text_mut_iter<'a>(vec_value: &'a mut Vec<Value>) -> impl Iterator<Item = &'a mut String> {
+//     seg_mut_iter(vec_value).filter_map(|seg| {
+//         if let MsgSegmentMut::Text { text } = seg {
+//             Some(text)
+//         } else {
+//             None
+//         }
+//     })
+// }
+
+fn first_text_mut(event: &mut Event) -> Option<&mut String> {
+    if let Some(MsgSegmentMut::Text { text, .. }) = event
+        .extra
+        .try_get_as_mut::<&mut Vec<Value>>("message")
+        .ok()
+        .and_then(|v| v.first_mut())
+        .and_then(|v| v.try_as_mut::<MsgSegmentMut<'_>>().ok())
+    {
+        Some(text)
     } else {
         None
     }
 }
 
-fn first_text_mut<D, S, P, I>(event: &mut BaseEvent<Message, D, S, P, I>) -> Option<&mut String> {
-    event.ty.message.first_mut().and_then(text_mut)
-}
-
-fn last_text_mut<D, S, P, I>(event: &mut BaseEvent<Message, D, S, P, I>) -> Option<&mut String> {
-    event.ty.message.last_mut().and_then(text_mut)
+fn last_text_mut(event: &mut Event) -> Option<&mut String> {
+    if let Some(MsgSegmentMut::Text { text, .. }) = event
+        .extra
+        .try_get_as_mut::<&mut Vec<Value>>("message")
+        .ok()
+        .and_then(|v| v.last_mut())
+        .and_then(|v| v.try_as_mut::<MsgSegmentMut<'_>>().ok())
+    {
+        Some(text)
+    } else {
+        None
+    }
 }
 
 pub struct StripPrefix {
     pub prefix: String,
 }
 
-impl<D, S, P, I> PreHandler<Message, D, S, P, I> for StripPrefix {
-    fn pre_handle(&self, session: &mut Session<Message, D, S, P, I>) -> Signal {
+impl PreHandler for StripPrefix {
+    fn pre_handle(&self, session: &mut Session) -> Signal {
         if let Some(text) = first_text_mut(&mut session.event) {
             if let Some(s) = text.strip_prefix(&self.prefix) {
                 *text = s.to_string();
-                session.update_alt();
                 return Signal::Matched;
             }
         }
@@ -47,9 +78,13 @@ where
     }
 }
 
-pub fn strip_whitespace<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
-    pre_handle_fn(|session| {
-        let mut sig = Signal::NotMatch;
+pub fn strip_whitespace(always_match: bool) -> impl PreHandler {
+    pre_handle_fn(move |session| {
+        let mut sig = if always_match {
+            Signal::Matched
+        } else {
+            Signal::NotMatch
+        };
         if let Some(text) = first_text_mut(&mut session.event) {
             while let Some(s) = text.strip_prefix(' ') {
                 *text = s.to_string();
@@ -62,43 +97,58 @@ pub fn strip_whitespace<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
                 sig = Signal::Matched;
             }
         }
-        if sig != Signal::NotMatch {
-            session.update_alt();
-        }
         sig
     })
 }
 
-fn _mention_me<D, S, P, I>(session: &mut Session<Message, D, S, P, I>) -> Signal {
-    let segments = &mut session.event.ty.message;
-    let self_id = Value::Str(session.event.ty.selft.user_id.clone());
-    for i in 0..segments.len() {
-        let seg = segments.get(i).unwrap();
-        if seg.ty.as_str() == "mention" {
-            if seg.data.get("user_id") == Some(&self_id) {
-                session.update_alt();
-                return Signal::Matched;
+fn _mention_me(session: &mut Session) -> Signal {
+    let self_id = session.event.selft().unwrap_or_default().user_id;
+    let Ok(segs) = session.event.extra.try_get_as_mut::<&mut Vec<Value>>("messge") else {
+        return Signal::NotMatch
+    };
+    let mut mentioned_index = None;
+    for (index, seg) in seg_mut_iter(segs).enumerate() {
+        match seg {
+            MsgSegmentMut::Mention { user_id } => {
+                if user_id.as_str() == &self_id {
+                    mentioned_index = Some(index);
+                    break;
+                }
             }
+            MsgSegmentMut::Text { text } if index == 0 => {
+                for nickname in &session.config.nicknames {
+                    if let Some(s) = text.strip_prefix(nickname) {
+                        if s.is_empty() {
+                            mentioned_index = Some(index);
+                            break;
+                        }
+                        *text = s.to_string();
+                        return Signal::Matched;
+                    }
+                }
+            }
+            _ => {}
         }
     }
-    Signal::NotMatch
+    if let Some(index) = mentioned_index {
+        segs.remove(index);
+        Signal::Matched
+    } else {
+        Signal::NotMatch
+    }
 }
 
-pub fn mention_me<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
+pub fn mention_me() -> impl PreHandler {
     pre_handle_fn(_mention_me)
 }
 
-pub fn to_me<D, S, P, I>() -> impl PreHandler<Message, D, S, P, I> {
+pub fn to_me() -> impl PreHandler {
     pre_handle_fn(|session| {
-        if let Some(text) = first_text_mut(&mut session.event) {
-            for nickname in &session.config.nicknames {
-                if let Some(s) = text.strip_prefix(nickname) {
-                    *text = s.to_string();
-                    session.update_alt();
-                    return Signal::Matched;
-                }
-            }
-        }
-        _mention_me(session)
+        let sig = if &session.event.detail_type == "private" {
+            Signal::Matched
+        } else {
+            Signal::NotMatch
+        };
+        sig + _mention_me(session)
     })
 }
