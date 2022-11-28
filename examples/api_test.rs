@@ -32,10 +32,9 @@ fn recall_test_plugin() -> impl MatcherHandler {
     on_command!(Recall, "./recall");
     matcher(|Recall(_): Recall, s: Session| async move {
         info!(target: "api_test", "recall test");
-        if let Ok(m) = s.reply("hello world").await {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            s.delete_message(m.message_id).await.ok();
-        }
+        let m = s.reply("hello world").await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        s.delete_message(m.message_id).await.unwrap();
     })
 }
 
@@ -54,7 +53,9 @@ fn mute_test() -> impl MatcherHandler {
                     selft: None,
                 })
                 .await
-                .ok();
+                .unwrap()
+                .as_result()
+                .unwrap();
             }
         },
     )
@@ -74,7 +75,7 @@ fn unmute_test() -> impl MatcherHandler {
                     selft: None,
                 })
                 .await
-                .ok();
+                .unwrap();
             }
         },
     )

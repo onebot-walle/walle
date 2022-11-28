@@ -129,7 +129,7 @@ impl ActionCaller for Session
 
 macro_rules! action_ext {
     ($fname: ident, $aty: expr => $rty: ty) => {
-        fn $fname<'a, 't>(&'a self) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + Send + 't>>
+        fn $fname<'a, 't>(&'a self) -> Pin<Box<dyn Future<Output = WalleResult<$rty>> + Send + 't>>
         where
             'a: 't,
             Self: 't,
@@ -142,7 +142,7 @@ macro_rules! action_ext {
         }
     };
     ($fname: ident, $a: expr => $rty: ty, $($f: ident: $fty: ty),*) => {
-        fn $fname<'a, 't>(&'a self, $($f: $fty),*) -> Pin<Box<dyn Future<Output = WalleResult<Vec<Event>>> + Send + 't>>
+        fn $fname<'a, 't>(&'a self, $($f: $fty),*) -> Pin<Box<dyn Future<Output = WalleResult<$rty>> + Send + 't>>
         where
             'a: 't,
             Self: 't,
@@ -365,27 +365,27 @@ pub trait ActionCallerExt: ActionCaller {
         channel_id: String,
         channel_name: String
     );
-    // action_ext!(
-    //     get_channel_member_info,
-    //     walle_core::action::GetChannelMemberInfo { guild_id, channel_id, user_id } => 
-    //     walle_core::structs::UserInfo,
-    //     guild_id: String,
-    //     channel_id: String,
-    //     user_id: String
-    // );
-    // action_ext!(
-    //     get_channel_member_list,
-    //     walle_core::action::GetChannelMemberList { guild_id, channel_id } => 
-    //     Vec<walle_core::structs::UserInfo>,
-    //     guild_id: String,
-    //     channel_id: String
-    // );
-    // action_ext!(
-    //     leave_channel,
-    //     walle_core::action::LeaveChannel { guild_id, channel_id } => (),
-    //     guild_id: String,
-    //     channel_id: String
-    // );
+    action_ext!(
+        get_channel_member_info,
+        walle_core::action::GetChannelMemberInfo { guild_id, channel_id, user_id } => 
+        walle_core::structs::UserInfo,
+        guild_id: String,
+        channel_id: String,
+        user_id: String
+    );
+    action_ext!(
+        get_channel_member_list,
+        walle_core::action::GetChannelMemberList { guild_id, channel_id } => 
+        Vec<walle_core::structs::UserInfo>,
+        guild_id: String,
+        channel_id: String
+    );
+    action_ext!(
+        leave_channel,
+        walle_core::action::LeaveChannel { guild_id, channel_id } => (),
+        guild_id: String,
+        channel_id: String
+    );
 
     // file
     action_ext!(
