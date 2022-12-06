@@ -79,17 +79,19 @@ pub fn channel_id_check(guild_id: &str, channel_id: &str) -> impl Rule {
 pub fn start_with(pat: &str) -> impl Rule {
     let word = pat.to_string();
     rule_fn(move |session: &Session| {
-        if session
+        if let Some(MsgSegmentRef::Text { text, .. }) = session
             .event
             .extra
-            .try_get_as_ref::<&str>("alt_message")
-            .unwrap_or_default()
-            .starts_with(&word)
+            .try_get_as_ref::<&Vec<Value>>("message")
+            .ok()
+            .and_then(|v| v.first())
+            .and_then(|v| v.try_as_ref::<MsgSegmentRef<'_>>().ok())
         {
-            Signal::Matched
-        } else {
-            Signal::NotMatch
+            if text.starts_with(&word) {
+                return Signal::Matched;
+            }
         }
+        Signal::NotMatch
     })
 }
 

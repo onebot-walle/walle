@@ -42,7 +42,11 @@ where
     H: MatcherHandler + Send + Sync,
 {
     async fn handle(&self, session: Session) -> Signal {
-        self.rule.rule(&session) + self.handler.handle(session).await
+        let mut sig = self.rule.rule(&session);
+        if sig != Signal::NotMatch {
+            sig = self.handler.handle(session).await & sig
+        }
+        sig
     }
 }
 
@@ -54,7 +58,7 @@ where
     R1: Rule + Send + Sync,
 {
     fn rule(&self, session: &Session) -> Signal {
-        self.0.rule(session) + self.1.rule(session)
+        self.0.rule(session) & self.1.rule(session)
     }
 }
 

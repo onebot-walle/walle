@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use walle_core::{action::Action, obc::AppOBC, resp::Resp, OneBot};
+use walle_core::{action::Action, obc::AppOBC, prelude::Event, resp::Resp, OneBot};
 
 pub mod matcher;
 // #[cfg(feature = "scheduler")]
@@ -37,4 +37,26 @@ pub fn new_walle(matchers: Matchers) -> Arc<OneBot<AppOBC<Action, Resp>, Matcher
         .with_timer(timer)
         .init();
     Arc::new(walle_core::OneBot::new(AppOBC::new(), matchers))
+}
+
+pub fn test_walle(
+    matchers: Matchers,
+) -> Arc<OneBot<walle_core::alt::TracingHandler<Event, Action, Resp>, Matchers>> {
+    let timer = tracing_subscriber::fmt::time::OffsetTime::new(
+        time::UtcOffset::from_hms(8, 0, 0).unwrap(),
+        time::format_description::parse(
+            "[year repr:last_two]-[month]-[day] [hour]:[minute]:[second]",
+        )
+        .unwrap(),
+    );
+    let env = tracing_subscriber::EnvFilter::from("debug");
+
+    tracing_subscriber::fmt()
+        .with_env_filter(env)
+        .with_timer(timer)
+        .init();
+    Arc::new(walle_core::OneBot::new(
+        walle_core::alt::TracingHandler::default(),
+        matchers,
+    ))
 }

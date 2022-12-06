@@ -14,12 +14,25 @@ pub enum Signal {
     NotMatch,
 }
 
-impl core::ops::Add for Signal {
+impl core::ops::BitOr for Signal {
     type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
+    fn bitor(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (_, Self::MatchAndBlock) | (Self::MatchAndBlock, _) => Self::MatchAndBlock,
             (_, Self::Matched) | (Self::Matched, _) => Self::Matched,
+            _ => Self::NotMatch,
+        }
+    }
+}
+
+impl core::ops::BitAnd for Signal {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::MatchAndBlock, Self::MatchAndBlock) => Self::MatchAndBlock,
+            (Self::MatchAndBlock, Self::Matched)
+            | (Self::Matched, Self::MatchAndBlock)
+            | (Self::Matched, Self::Matched) => Self::Matched,
             _ => Self::NotMatch,
         }
     }

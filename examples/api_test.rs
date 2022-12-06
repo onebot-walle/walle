@@ -1,7 +1,7 @@
 use tracing::info;
 use walle::{
-    matcher, new_walle, on_command, ActionCaller, ActionCallerExt, AppConfig, MatcherHandler,
-    Matchers, MatchersConfig, Session,
+    matcher, on_command, ActionCaller, ActionCallerExt, MatcherHandler, Matchers, MatchersConfig,
+    Session,
 };
 use walle_core::{
     event::GroupMessageEvent,
@@ -18,11 +18,40 @@ async fn main() {
         .add_matcher(unmute_test().boxed());
     // .add_matcher(member_test())
     // .add_matcher(forward_test_plugin());
-    let walle = new_walle(matchers);
+    let walle = walle::new_walle(matchers);
     let joins = walle
-        .start(AppConfig::default(), MatchersConfig::default(), true)
+        .start(
+            walle::config::AppConfig::default(),
+            MatchersConfig::default(),
+            true,
+        )
         .await
         .unwrap();
+    // let walle = test_walle(matchers);
+    // let joins = walle
+    //     .start((), MatchersConfig::default(), true)
+    //     .await
+    //     .unwrap();
+    // walle
+    //     .handle_event(Event {
+    //         id: "".to_owned(),
+    //         time: 0.0,
+    //         ty: "message".to_owned(),
+    //         detail_type: "group".to_owned(),
+    //         sub_type: "".to_owned(),
+    //         extra: value_map! {
+    //             "group_id": "",
+    //             "user_id": "",
+    //             "message": [{
+    //                 "type": "text",
+    //                 "data": {
+    //                     "text": "呼叫全体干员"
+    //                 }
+    //             }]
+    //         },
+    //     })
+    //     .await
+    //     .ok();
     for join in joins {
         join.await.ok();
     }

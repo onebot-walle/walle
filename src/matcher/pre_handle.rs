@@ -39,7 +39,11 @@ where
     H: MatcherHandler + Send + Sync,
 {
     async fn handle(&self, mut session: Session) -> Signal {
-        self.pre.pre_handle(&mut session) + self.handler.handle(session).await
+        let mut sig = self.pre.pre_handle(&mut session);
+        if sig != Signal::NotMatch {
+            sig = self.handler.handle(session).await & sig;
+        }
+        sig
     }
 }
 
@@ -51,7 +55,7 @@ where
     PR1: PreHandler + Sync,
 {
     fn pre_handle(&self, session: &mut Session) -> Signal {
-        self.0.pre_handle(session) + self.1.pre_handle(session)
+        self.0.pre_handle(session) & self.1.pre_handle(session)
     }
 }
 
@@ -63,7 +67,7 @@ where
     R: Rule + Sync,
 {
     fn pre_handle(&self, session: &mut Session) -> Signal {
-        self.0.pre_handle(session) + self.1.rule(session)
+        self.0.pre_handle(session) & self.1.rule(session)
     }
 }
 
@@ -75,7 +79,7 @@ where
     PH: PreHandler + Sync,
 {
     fn pre_handle(&self, session: &mut Session) -> Signal {
-        self.0.rule(session) + self.1.pre_handle(session)
+        self.0.rule(session) & self.1.pre_handle(session)
     }
 }
 

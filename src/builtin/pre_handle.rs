@@ -103,7 +103,7 @@ pub fn strip_whitespace(always_match: bool) -> impl PreHandler {
 
 fn _mention_me(session: &mut Session) -> Signal {
     let self_id = session.event.selft().unwrap_or_default().user_id;
-    let Ok(segs) = session.event.extra.try_get_as_mut::<&mut Vec<Value>>("messge") else {
+    let Ok(segs) = session.event.extra.try_get_as_mut::<&mut Vec<Value>>("message") else {
         return Signal::NotMatch
     };
     let mut mentioned_index = None;
@@ -149,6 +149,6 @@ pub fn to_me() -> impl PreHandler {
         } else {
             Signal::NotMatch
         };
-        sig + _mention_me(session)
+        sig | _mention_me(session)
     })
 }
