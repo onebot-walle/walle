@@ -1,57 +1,8 @@
 use crate::{pre_handle_fn, PreHandler, Session, Signal};
 use walle_core::{
-    prelude::Event,
-    segment::MsgSegmentMut,
+    segment::{MessageMutExt, MsgSegmentMut},
     util::{Value, ValueMapExt},
 };
-
-fn seg_mut_iter<'a>(vec_value: &'a mut Vec<Value>) -> impl Iterator<Item = MsgSegmentMut<'a>> {
-    vec_value.into_iter().filter_map(|v| {
-        if let Ok(seg) = v.try_as_mut() {
-            Some(seg)
-        } else {
-            None
-        }
-    })
-}
-
-// fn seg_text_mut_iter<'a>(vec_value: &'a mut Vec<Value>) -> impl Iterator<Item = &'a mut String> {
-//     seg_mut_iter(vec_value).filter_map(|seg| {
-//         if let MsgSegmentMut::Text { text } = seg {
-//             Some(text)
-//         } else {
-//             None
-//         }
-//     })
-// }
-
-fn first_text_mut(event: &mut Event) -> Option<&mut String> {
-    if let Some(MsgSegmentMut::Text { text, .. }) = event
-        .extra
-        .try_get_as_mut::<&mut Vec<Value>>("message")
-        .ok()
-        .and_then(|v| v.first_mut())
-        .and_then(|v| v.try_as_mut::<MsgSegmentMut<'_>>().ok())
-    {
-        Some(text)
-    } else {
-        None
-    }
-}
-
-fn last_text_mut(event: &mut Event) -> Option<&mut String> {
-    if let Some(MsgSegmentMut::Text { text, .. }) = event
-        .extra
-        .try_get_as_mut::<&mut Vec<Value>>("message")
-        .ok()
-        .and_then(|v| v.last_mut())
-        .and_then(|v| v.try_as_mut::<MsgSegmentMut<'_>>().ok())
-    {
-        Some(text)
-    } else {
-        None
-    }
-}
 
 pub struct StripPrefix {
     pub prefix: String,
@@ -59,7 +10,13 @@ pub struct StripPrefix {
 
 impl PreHandler for StripPrefix {
     fn pre_handle(&self, session: &mut Session) -> Signal {
-        if let Some(text) = first_text_mut(&mut session.event) {
+        if let Some(text) = session
+            .event
+            .extra
+            .try_get_as_mut::<&mut Vec<Value>>("message")
+            .ok()
+            .and_then(|v| v.try_first_text_mut().ok())
+        {
             if let Some(s) = text.strip_prefix(&self.prefix) {
                 *text = s.to_string();
                 return Signal::Matched;
@@ -85,13 +42,19 @@ pub fn strip_whitespace(always_match: bool) -> impl PreHandler {
         } else {
             Signal::NotMatch
         };
-        if let Some(text) = first_text_mut(&mut session.event) {
+        let Ok(segs) = session
+            .event
+            .extra
+            .try_get_as_mut::<&mut Vec<Value>>("message") else {
+                return sig;
+            };
+        if let Ok(text) = segs.try_first_text_mut() {
             while let Some(s) = text.strip_prefix(' ') {
                 *text = s.to_string();
                 sig = Signal::Matched;
             }
         }
-        if let Some(text) = last_text_mut(&mut session.event) {
+        if let Ok(text) = segs.try_last_text_mut() {
             while let Some(s) = text.strip_suffix(' ') {
                 *text = s.to_string();
                 sig = Signal::Matched;
@@ -107,7 +70,8 @@ fn _mention_me(session: &mut Session) -> Signal {
         return Signal::NotMatch
     };
     let mut mentioned_index = None;
-    for (index, seg) in seg_mut_iter(segs).enumerate() {
+    let Ok(seg_muts) = segs.try_as_mut() else {return Signal::NotMatch};
+    for (index, seg) in seg_muts.into_iter().enumerate() {
         match seg {
             MsgSegmentMut::Mention { user_id } => {
                 if user_id.as_str() == &self_id {

@@ -4,7 +4,7 @@ mod test {
     #[walle_core::prelude::async_trait]
     impl crate::FromSessionPart for Command {
         async fn from_session_part(session: &mut crate::Session) -> walle_core::WalleResult<Self> {
-            use walle_core::{segment::MessageExt, util::ValueMapExt};
+            use walle_core::{segment::MessageMutExt, util::ValueMapExt};
             let mut segs = session
                 .event
                 .extra
@@ -76,7 +76,7 @@ macro_rules! on_command {
             async fn from_session_part(
                 session: &mut crate::Session,
             ) -> walle_core::WalleResult<Self> {
-                use walle_core::{segment::MessageExt, util::ValueMapExt};
+                use walle_core::{segment::MessageMutExt, util::ValueMapExt};
                 let mut segs = session
                     .event
                     .extra
