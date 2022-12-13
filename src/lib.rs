@@ -19,6 +19,10 @@ pub use matcher::*;
 pub use walle_core;
 // #[cfg(feature = "scheduler")]
 // pub use scheduler::*;
+#[doc(hidden)]
+pub use tokio;
+#[doc(hidden)]
+pub use tracing;
 
 pub mod builtin;
 

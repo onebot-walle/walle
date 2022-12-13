@@ -1,4 +1,4 @@
-use crate::{pre_handle_fn, PreHandler, Session, Signal};
+use crate::{pre_handle_fn, MatchersConfig, PreHandler, Session, Signal};
 use walle_core::{
     segment::{MessageMutExt, MsgSegmentMut},
     util::{Value, ValueMapExt},
@@ -35,7 +35,7 @@ where
     }
 }
 
-pub fn strip_whitespace(always_match: bool) -> impl PreHandler {
+pub fn trim(always_match: bool) -> impl PreHandler {
     pre_handle_fn(move |session| {
         let mut sig = if always_match {
             Signal::Matched
@@ -49,16 +49,16 @@ pub fn strip_whitespace(always_match: bool) -> impl PreHandler {
                 return sig;
             };
         if let Ok(text) = segs.try_first_text_mut() {
-            while let Some(s) = text.strip_prefix(' ') {
-                *text = s.to_string();
+            if text.starts_with(' ') {
                 sig = Signal::Matched;
             }
+            *text = text.trim_start().to_owned();
         }
         if let Ok(text) = segs.try_last_text_mut() {
-            while let Some(s) = text.strip_suffix(' ') {
-                *text = s.to_string();
+            if text.ends_with(' ') {
                 sig = Signal::Matched;
             }
+            *text = text.trim_end().to_owned();
         }
         sig
     })
@@ -69,27 +69,19 @@ fn _mention_me(session: &mut Session) -> Signal {
     let Ok(segs) = session.event.extra.try_get_as_mut::<&mut Vec<Value>>("message") else {
         return Signal::NotMatch
     };
+    _mention_user(segs, self_id) | _nickname(&session.config, segs)
+}
+
+fn _mention_user(segs: &mut Vec<Value>, user_id: String) -> Signal {
     let mut mentioned_index = None;
-    let Ok(seg_muts) = segs.try_as_mut() else {return Signal::NotMatch};
+    let Ok(seg_muts) = segs.try_as_mut() else { return Signal::NotMatch };
     for (index, seg) in seg_muts.into_iter().enumerate() {
         match seg {
-            MsgSegmentMut::Mention { user_id } => {
-                if user_id.as_str() == &self_id {
-                    mentioned_index = Some(index);
-                    break;
-                }
-            }
-            MsgSegmentMut::Text { text } if index == 0 => {
-                for nickname in &session.config.nicknames {
-                    if let Some(s) = text.strip_prefix(nickname) {
-                        if s.is_empty() {
-                            mentioned_index = Some(index);
-                            break;
-                        }
-                        *text = s.to_string();
-                        return Signal::Matched;
-                    }
-                }
+            MsgSegmentMut::Mention {
+                user_id: mention_id,
+            } if mention_id.as_str() == &user_id => {
+                mentioned_index = Some(index);
+                break;
             }
             _ => {}
         }
@@ -100,6 +92,31 @@ fn _mention_me(session: &mut Session) -> Signal {
     } else {
         Signal::NotMatch
     }
+}
+
+fn _nickname(config: &MatchersConfig, segs: &mut Vec<Value>) -> Signal {
+    if let Ok(text) = segs.try_first_text_mut() {
+        for nickname in &config.nicknames {
+            if let Some(s) = text.strip_prefix(nickname) {
+                if !s.is_empty() {
+                    *text = s.to_owned();
+                } else {
+                    segs.remove(0);
+                }
+                return Signal::Matched;
+            }
+        }
+    }
+    Signal::NotMatch
+}
+
+pub fn mention_user(user_id: String) -> impl PreHandler {
+    pre_handle_fn(move |session| {
+        let Ok(segs) = session.event.extra.try_get_as_mut::<&mut Vec<Value>>("message") else {
+            return Signal::NotMatch
+        };
+        _mention_user(segs, user_id.clone())
+    })
 }
 
 pub fn mention_me() -> impl PreHandler {

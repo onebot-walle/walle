@@ -1,5 +1,7 @@
 use super::TempMatcher;
-use crate::{ActionCaller, ActionCallerExt, MatcherHandler, MatchersConfig, Rule, TempMatchers};
+use crate::{
+    ActionCaller, ActionCallerExt, MatcherHandler, MatchersConfig, PreHandler, Rule, TempMatchers,
+};
 use std::{sync::Arc, time::Duration};
 use walle_core::{
     event::{
@@ -46,21 +48,24 @@ impl Session {
 #[derive(Clone)]
 enum ReplySign {
     Private(String),
-    Group(String),
-    Channel(String, String),
+    Group(String, String),
+    Channel(String, String, String),
     UnReplyAble,
 }
 
 impl ReplySign {
     fn new(event: &Event) -> Self {
-        if let Ok(guild_id) = event.extra.get_downcast("guild_id") {
-            if let Ok(channel_id) = event.extra.get_downcast("channel_id") {
-                ReplySign::Channel(guild_id, channel_id)
-            } else {
-                ReplySign::UnReplyAble
-            }
-        } else if let Ok(group_id) = event.extra.get_downcast("group_id") {
-            ReplySign::Group(group_id)
+        if let (Ok(guild_id), Ok(channel_id), Ok(user_id)) = (
+            event.extra.get_downcast("guild_id"),
+            event.extra.get_downcast("channel_id"),
+            event.extra.get_downcast("user_id"),
+        ) {
+            ReplySign::Channel(guild_id, channel_id, user_id)
+        } else if let (Ok(group_id), Ok(user_id)) = (
+            event.extra.get_downcast("group_id"),
+            event.extra.get_downcast("user_id"),
+        ) {
+            ReplySign::Group(group_id, user_id)
         } else if let Ok(user_id) = event.extra.get_downcast("user_id") {
             ReplySign::Private(user_id)
         } else {
@@ -68,51 +73,109 @@ impl ReplySign {
         }
     }
 
-    fn ruled<H>(&self, handler: H) -> WalleResult<Box<dyn MatcherHandler + Send + Sync + 'static>>
+    fn ruled<H, PH>(
+        &self,
+        handler: H,
+        extra_pre_handler: PH,
+        this_user_only: bool,
+    ) -> WalleResult<Box<dyn MatcherHandler + Send + Sync + 'static>>
     where
         H: MatcherHandler + Send + Sync + 'static,
+        PH: PreHandler + Send + Sync + 'static,
     {
-        match self {
-            ReplySign::Private(user_id) => Ok(Box::new(
-                crate::builtin::user_id_check(user_id).layer(handler),
-            )),
-            ReplySign::Group(group_id) => Ok(Box::new(
-                crate::builtin::group_id_check(group_id).layer(handler),
-            )),
-            ReplySign::Channel(guild_id, channel_id) => Ok(Box::new(
-                crate::builtin::channel_id_check(guild_id, channel_id).layer(handler),
-            )),
-            ReplySign::UnReplyAble => Err(WalleError::Other("unreplyable session".to_string())),
-        }
+        use crate::builtin::*;
+        Ok(match self {
+            ReplySign::Private(user_id) => extra_pre_handler
+                .with_rule(user_id_check(user_id))
+                .layer(handler)
+                .boxed(),
+            ReplySign::Group(group_id, user_id) => {
+                if this_user_only {
+                    extra_pre_handler
+                        .with_rule(user_id_check(user_id))
+                        .with_rule(group_id_check(group_id))
+                        .layer(handler)
+                        .boxed()
+                } else {
+                    extra_pre_handler
+                        .with_rule(group_id_check(group_id))
+                        .layer(handler)
+                        .boxed()
+                }
+            }
+            ReplySign::Channel(guild_id, channel_id, user_id) => {
+                if this_user_only {
+                    extra_pre_handler
+                        .with_rule(user_id_check(user_id))
+                        .with_rule(channel_id_check(guild_id, channel_id))
+                        .layer(handler)
+                        .boxed()
+                } else {
+                    extra_pre_handler
+                        .with_rule(channel_id_check(guild_id, channel_id))
+                        .layer(handler)
+                        .boxed()
+                }
+            }
+            ReplySign::UnReplyAble => {
+                return Err(WalleError::Other("unreplyable session".to_string()))
+            }
+        })
     }
 }
 
 impl Session {
-    pub async fn reply<M: IntoMessage + Send + Sync>(
-        &self,
-        message: M,
-    ) -> WalleResult<SendMessageResp> {
+    pub async fn reply<M: IntoMessage + Send>(&self, message: M) -> WalleResult<SendMessageResp> {
         match &self.reply_sign {
             ReplySign::Private(user_id) => {
                 self.send_private_message(user_id.clone(), message).await
             }
-            ReplySign::Group(group_id) => self.send_group_message(group_id.clone(), message).await,
-            ReplySign::Channel(guild_id, channel_id) => {
+            ReplySign::Group(group_id, ..) => {
+                self.send_group_message(group_id.clone(), message).await
+            }
+            ReplySign::Channel(guild_id, channel_id, ..) => {
                 self.send_channel_message(guild_id.clone(), channel_id.clone(), message)
                     .await
             }
             ReplySign::UnReplyAble => Err(WalleError::Other("unreplyable session".to_string())),
         }
     }
-    pub async fn get<M: IntoMessage + Send + Sync>(
+    pub async fn get<M>(&mut self, message: M, this_user_only: bool) -> WalleResult<SendMessageResp>
+    where
+        M: IntoMessage + Send,
+    {
+        self.get_with_pre_handler(message, (), this_user_only).await
+    }
+    pub async fn get_with_rule<M, R>(
         &mut self,
         message: M,
-    ) -> WalleResult<SendMessageResp> {
+        rule: R,
+        this_user_only: bool,
+    ) -> WalleResult<SendMessageResp>
+    where
+        M: IntoMessage + Send,
+        R: Rule + Send + Sync + 'static,
+    {
+        self.get_with_pre_handler(message, ().with_rule(rule), this_user_only)
+            .await
+    }
+    pub async fn get_with_pre_handler<M, PH>(
+        &mut self,
+        message: M,
+        pre_handler: PH,
+        this_user_only: bool,
+    ) -> WalleResult<SendMessageResp>
+    where
+        M: IntoMessage + Send,
+        PH: PreHandler + Send + Sync + 'static,
+    {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let temp = self.reply_sign.ruled(TempMatcher { tx })?;
+        let temp = self
+            .reply_sign
+            .ruled(TempMatcher { tx }, pre_handler, this_user_only)?;
         self.temps.lock().await.insert(self.event.id.clone(), temp);
         let resp = self.reply(message).await?;
-        if let Ok(Some(event)) = tokio::time::timeout(Duration::from_secs(10), rx.recv()).await {
+        if let Ok(Some(event)) = tokio::time::timeout(Duration::from_secs(60), rx.recv()).await {
             self.event = event;
         } else {
             self.temps.lock().await.remove(&self.event.id);

@@ -30,6 +30,12 @@ pub trait Rule {
     }
 }
 
+impl Rule for () {
+    fn rule(&self, _: &Session) -> Signal {
+        Signal::Matched
+    }
+}
+
 pub struct LayeredRule<R, H> {
     pub rule: R,
     pub handler: H,

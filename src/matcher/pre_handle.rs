@@ -27,6 +27,12 @@ pub trait PreHandler {
     }
 }
 
+impl PreHandler for () {
+    fn pre_handle(&self, _: &mut Session) -> Signal {
+        Signal::Matched
+    }
+}
+
 pub struct LayeredPreHandler<PR, H> {
     pub pre: PR,
     pub handler: H,
@@ -63,8 +69,8 @@ pub struct JoinedPreHandlerRule<PH, R>(pub PH, pub R);
 
 impl<PH, R> PreHandler for JoinedPreHandlerRule<PH, R>
 where
-    PH: PreHandler + Sync,
-    R: Rule + Sync,
+    PH: PreHandler,
+    R: Rule,
 {
     fn pre_handle(&self, session: &mut Session) -> Signal {
         self.0.pre_handle(session) & self.1.rule(session)

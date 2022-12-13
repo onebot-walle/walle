@@ -1,0 +1,14 @@
+[package]
+name = "walle-plugin-roulette"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+walle = { path = "../../" }
+tokio = "*"
+rand = "*"
+
+[dev-dependencies]
+tokio = { version = "*", features = ["full"] }
