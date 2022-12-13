@@ -7,7 +7,7 @@ use walle::builtin::{mention_user, start_with, trim};
 use walle::walle_core::event::GroupMessageEvent;
 use walle::walle_core::util::ValueMapExt;
 use walle::walle_core::WalleResult;
-use walle::{matcher, on_command, MatcherHandler, PreHandler, Session};
+use walle::{matcher, on_command, MatcherHandler, Session};
 
 on_command!(Roulette, Start => "轮盘赌", Shot => "shot");
 
@@ -22,14 +22,18 @@ impl RouletteMatcher {
     ) -> WalleResult<()> {
         match ro {
             Roulette::Start(_seg) => {
-                s.get_with_pre_handler(
-                    "开始轮盘赌局，哪位英雄接受挑战？",
-                    mention_user(event.ty.user_id.clone())
-                        .with(trim(true))
-                        .with_rule(start_with("接受赌局")),
-                    false,
-                )
-                .await?;
+                s.getter()
+                    .with_pre_handler(mention_user(event.ty.user_id.clone()))
+                    .with_pre_handler(trim(true))
+                    .with_rule(start_with("接受赌局"))
+                    .timeout(60)
+                    .timeout_callback(|s| {
+                        Box::pin(async move {
+                            s.reply("轮盘赌邀请已过期").await.ok();
+                        })
+                    })
+                    .get("开始轮盘赌局，哪位英雄接受挑战？")
+                    .await?;
                 self.0
                     .lock()
                     .await

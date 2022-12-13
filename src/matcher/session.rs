@@ -2,7 +2,7 @@ use super::TempMatcher;
 use crate::{
     ActionCaller, ActionCallerExt, MatcherHandler, MatchersConfig, PreHandler, Rule, TempMatchers,
 };
-use std::{sync::Arc, time::Duration};
+use std::{pin::Pin, sync::Arc, time::Duration};
 use walle_core::{
     event::{
         BaseEvent, DetailTypeLevel, ImplLevel, ParseEvent, PlatformLevel, SubTypeLevel,
@@ -140,45 +140,123 @@ impl Session {
             ReplySign::UnReplyAble => Err(WalleError::Other("unreplyable session".to_string())),
         }
     }
-    pub async fn get<M>(&mut self, message: M, this_user_only: bool) -> WalleResult<SendMessageResp>
-    where
-        M: IntoMessage + Send,
-    {
-        self.get_with_pre_handler(message, (), this_user_only).await
+    pub fn getter<'a>(&'a mut self) -> SessionGetter<'a, (), ()> {
+        SessionGetter {
+            session: self,
+            rule: (),
+            pre_handler: (),
+            this_user_only: false,
+            timeout: 60,
+            timeout_callback: |_: &Session| Box::pin(async move {}),
+        }
     }
-    pub async fn get_with_rule<M, R>(
-        &mut self,
-        message: M,
-        rule: R,
-        this_user_only: bool,
-    ) -> WalleResult<SendMessageResp>
+    pub async fn get<M>(&mut self, message: M) -> WalleResult<SendMessageResp>
     where
         M: IntoMessage + Send,
-        R: Rule + Send + Sync + 'static,
     {
-        self.get_with_pre_handler(message, ().with_rule(rule), this_user_only)
-            .await
+        self.getter().get(message).await
     }
-    pub async fn get_with_pre_handler<M, PH>(
-        &mut self,
-        message: M,
-        pre_handler: PH,
-        this_user_only: bool,
-    ) -> WalleResult<SendMessageResp>
+}
+
+pub struct SessionGetter<'a, R, PH> {
+    session: &'a mut Session,
+    rule: R,
+    pre_handler: PH,
+    this_user_only: bool,
+    timeout: u64,
+    timeout_callback:
+        for<'b> fn(&'b Session) -> Pin<Box<dyn core::future::Future<Output = ()> + Send + 'b>>,
+}
+
+impl<'a, R, PH> SessionGetter<'a, R, PH>
+where
+    R: Rule + Send + Sync + 'static,
+    PH: PreHandler + Send + Sync + 'static,
+{
+    pub fn with_rule<R0>(self, rule: R0) -> SessionGetter<'a, crate::JoinedRule<R, R0>, PH>
     where
-        M: IntoMessage + Send,
-        PH: PreHandler + Send + Sync + 'static,
+        R0: Rule + Send + Sync + 'static,
     {
+        SessionGetter {
+            session: self.session,
+            rule: self.rule.with(rule),
+            pre_handler: self.pre_handler,
+            this_user_only: self.this_user_only,
+            timeout: self.timeout,
+            timeout_callback: self.timeout_callback,
+        }
+    }
+
+    pub fn with_pre_handler<PH0>(
+        self,
+        pre_handler: PH0,
+    ) -> SessionGetter<'a, R, crate::JoinedPreHandler<PH, PH0>>
+    where
+        PH0: PreHandler + Send + Sync + 'static,
+    {
+        SessionGetter {
+            session: self.session,
+            rule: self.rule,
+            pre_handler: self.pre_handler.with(pre_handler),
+            this_user_only: self.this_user_only,
+            timeout: self.timeout,
+            timeout_callback: self.timeout_callback,
+        }
+    }
+
+    pub fn this_user_only(self) -> Self {
+        Self {
+            this_user_only: true,
+            ..self
+        }
+    }
+
+    pub fn timeout(self, timeout: u64) -> Self {
+        Self { timeout, ..self }
+    }
+
+    pub fn timeout_callback(
+        self,
+        callback: for<'b> fn(
+            &'b Session,
+        )
+            -> Pin<Box<dyn core::future::Future<Output = ()> + Send + 'b>>,
+    ) -> SessionGetter<'a, R, PH> {
+        SessionGetter {
+            session: self.session,
+            rule: self.rule,
+            pre_handler: self.pre_handler,
+            this_user_only: self.this_user_only,
+            timeout: self.timeout,
+            timeout_callback: callback,
+        }
+    }
+
+    pub async fn get<M: IntoMessage + Send>(self, message: M) -> WalleResult<SendMessageResp> {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let temp = self
-            .reply_sign
-            .ruled(TempMatcher { tx }, pre_handler, this_user_only)?;
-        self.temps.lock().await.insert(self.event.id.clone(), temp);
-        let resp = self.reply(message).await?;
-        if let Ok(Some(event)) = tokio::time::timeout(Duration::from_secs(60), rx.recv()).await {
-            self.event = event;
+        let temp = self.session.reply_sign.ruled(
+            TempMatcher { tx },
+            self.pre_handler.with_rule(self.rule),
+            self.this_user_only,
+        )?;
+        self.session
+            .temps
+            .lock()
+            .await
+            .insert(self.session.event.id.clone(), temp);
+        let resp = self.session.reply(message).await?;
+        if let Ok(Some(event)) =
+            tokio::time::timeout(Duration::from_secs(self.timeout), rx.recv()).await
+        {
+            self.session.event = event;
         } else {
-            self.temps.lock().await.remove(&self.event.id);
+            self.session
+                .temps
+                .lock()
+                .await
+                .remove(&self.session.event.id);
+            (self.timeout_callback)(self.session).await;
+            return Err(WalleError::Other("session get timeout".to_owned()));
         }
         Ok(resp)
     }
