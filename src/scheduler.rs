@@ -1,12 +1,12 @@
 use std::{future::Future, pin::Pin};
 
-use crate::Walle;
+use crate::{ActionCaller, Walle};
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 /// 定时任务 trait
 pub trait ScheduledJob {
     fn cron(&self) -> &'static str;
-    fn call(&self, walle: Walle) -> Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>>;
+    fn call(&self, walle: Walle) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 }
 
 /// 定时任务执行器
@@ -43,10 +43,10 @@ impl ScheduledJob for OneMinutePassed {
     fn cron(&self) -> &'static str {
         "0 * * * * *"
     }
-    fn call(&self, walle: Walle) -> Pin<Box<dyn Future<Output = ()> + Send + Sync + 'static>> {
+    fn call(&self, walle: Walle) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
         Box::pin(async move {
-            for (bot_id, _bot) in walle.bots.read().await.iter() {
-                println!("One minute passed with bot: {}", bot_id);
+            for bot in walle.get_bots().await.iter() {
+                println!("One minute passed with bot: {:?}", bot.selft);
             }
         })
     }

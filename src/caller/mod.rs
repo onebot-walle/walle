@@ -65,12 +65,13 @@ impl GetSelfs for Bot {
 impl ActionCaller for Bot {
     fn call_action<'a, 't>(
         &'a self,
-        action: Action,
+        mut action: Action,
     ) -> Pin<Box<dyn Future<Output = WalleResult<Resp>> + Send + 't>>
     where
         'a: 't,
         Self: 't,
     {
+        action.selft = Some(self.selft.clone());
         self.caller.call_action(action)
     }
     fn get_bots<'a, 't>(&'a self) -> Pin<Box<dyn Future<Output = Vec<Bot>> + Send + 't>>

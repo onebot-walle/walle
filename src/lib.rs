@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use walle_core::{action::Action, obc::AppOBC, prelude::Event, resp::Resp, OneBot};
 
-pub mod matcher;
-// #[cfg(feature = "scheduler")]
-// mod scheduler;
 mod bot;
 mod caller;
+pub mod matcher;
+#[cfg(feature = "scheduler")]
+mod scheduler;
 mod utils;
 
 // pub mod builtin;
@@ -16,18 +16,20 @@ pub use bot::Bot;
 pub use caller::{ActionCaller, ActionCallerExt};
 pub use config::*;
 pub use matcher::*;
-pub use walle_core;
-// #[cfg(feature = "scheduler")]
-// pub use scheduler::*;
+#[cfg(feature = "scheduler")]
+pub use scheduler::*;
 #[doc(hidden)]
 pub use tokio;
 #[doc(hidden)]
 pub use tracing;
+pub use walle_core;
 
 pub mod builtin;
 
+pub type Walle = Arc<OneBot<AppOBC<Action, Resp>, Matchers>>;
+
 /// 构造一个新的 Walle 实例
-pub fn new_walle(matchers: Matchers) -> Arc<OneBot<AppOBC<Action, Resp>, Matchers>> {
+pub fn new_walle(matchers: Matchers) -> Walle {
     let timer = tracing_subscriber::fmt::time::OffsetTime::new(
         time::UtcOffset::from_hms(8, 0, 0).unwrap(),
         time::format_description::parse(

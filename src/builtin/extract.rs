@@ -119,7 +119,7 @@ macro_rules! on_command {
         #[$span::walle_core::prelude::async_trait]
         impl $span::FromSessionPart for $cid {
             async fn from_session_part(
-                session: &mut crate::Session,
+                session: &mut $span::Session,
             ) -> $span::walle_core::WalleResult<Self> {
                 use $span::walle_core::{segment::MessageMutExt, util::ValueMapExt};
                 let mut segs = session
