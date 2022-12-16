@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{ActionCaller, Walle};
 use tokio_cron_scheduler::{Job, JobScheduler};
@@ -49,5 +49,19 @@ impl ScheduledJob for OneMinutePassed {
                 println!("One minute passed with bot: {:?}", bot.selft);
             }
         })
+    }
+}
+
+pub trait ArcScheduledJob {
+    fn cron(&self) -> &'static str;
+    fn call(self: &Arc<Self>, walle: Walle) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
+}
+
+impl<T: ArcScheduledJob> ScheduledJob for Arc<T> {
+    fn cron(&self) -> &'static str {
+        <T as ArcScheduledJob>::cron(&self)
+    }
+    fn call(&self, walle: Walle) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+        <T as ArcScheduledJob>::call(&self, walle)
     }
 }

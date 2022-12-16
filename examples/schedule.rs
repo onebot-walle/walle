@@ -5,7 +5,7 @@ use walle::{
 #[tokio::main]
 async fn main() {
     let matchers = Matchers::default();
-    let walle = new_walle(matchers);
+    let walle = new_walle(matchers, "debug");
     let mut scheduler = Scheduler::new(walle.clone());
     scheduler.add(OneMinutePassed);
     scheduler.start();

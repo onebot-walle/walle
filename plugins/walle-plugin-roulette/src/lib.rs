@@ -96,7 +96,7 @@ pub fn roulette() -> impl MatcherHandler {
 #[tokio::test]
 async fn t() {
     let matchers = walle::Matchers::default().add_matcher(roulette().boxed());
-    let walle = walle::new_walle(matchers);
+    let walle = walle::new_walle(matchers, "debug");
     for join in walle
         .start(
             walle::config::AppConfig::default(),

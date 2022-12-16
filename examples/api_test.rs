@@ -18,7 +18,7 @@ async fn main() {
         .add_matcher(unmute_test().boxed());
     // .add_matcher(member_test())
     // .add_matcher(forward_test_plugin());
-    let walle = walle::new_walle(matchers);
+    let walle = walle::new_walle(matchers, "debug");
     let joins = walle
         .start(
             walle::config::AppConfig::default(),

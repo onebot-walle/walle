@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use tracing_subscriber::EnvFilter;
 use walle_core::{action::Action, obc::AppOBC, prelude::Event, resp::Resp, OneBot};
 
 mod bot;
@@ -29,7 +30,7 @@ pub mod builtin;
 pub type Walle = Arc<OneBot<AppOBC<Action, Resp>, Matchers>>;
 
 /// 构造一个新的 Walle 实例
-pub fn new_walle(matchers: Matchers) -> Walle {
+pub fn new_walle(matchers: Matchers, env: &str) -> Walle {
     let timer = tracing_subscriber::fmt::time::OffsetTime::new(
         time::UtcOffset::from_hms(8, 0, 0).unwrap(),
         time::format_description::parse(
@@ -37,7 +38,7 @@ pub fn new_walle(matchers: Matchers) -> Walle {
         )
         .unwrap(),
     );
-    let env = tracing_subscriber::EnvFilter::from("debug");
+    let env = EnvFilter::from(env);
     tracing_subscriber::fmt()
         .with_env_filter(env)
         .with_timer(timer)

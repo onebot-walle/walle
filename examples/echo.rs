@@ -4,7 +4,7 @@ use walle_core::config::AppConfig;
 #[tokio::main]
 async fn main() {
     let matchers = Matchers::default().add_matcher(echo().boxed());
-    let walle = new_walle(matchers);
+    let walle = new_walle(matchers, "debug");
     let joins = walle
         .start(AppConfig::default(), MatchersConfig::default(), true)
         .await
